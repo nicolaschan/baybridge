@@ -1,5 +1,5 @@
 use crate::{
-    actions::SetKeyPayload,
+    client::SetKeyPayload,
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
@@ -56,7 +56,7 @@ impl HttpConnection {
     }
 
     pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
-        let path = format!("{}", self.url);
+        let path = self.url.to_string();
         debug!("Sending request to {}", path);
         let response: IndexResponse = reqwest::Client::new()
             .get(&path)

@@ -1,11 +1,17 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
-use crate::connection::{connection::Connection, http::HttpConnection};
+use crate::connectors::{connection::Connection, http::HttpConnection};
 
 pub struct Configuration {
     base_dir: PathBuf,
     connection: Connection,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Configuration {

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use baybridge::{
-    actions::Actions, configuration::Configuration, crypto::encode::encode_verifying_key,
+    client::Actions, configuration::Configuration, crypto::encode::encode_verifying_key,
 };
 use clap::{command, Parser, Subcommand};
 use http_server::start_http_server;

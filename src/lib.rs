@@ -1,4 +1,4 @@
-pub mod actions;
+pub mod client;
 pub mod configuration;
-pub mod connection;
+pub mod connectors;
 pub mod crypto;

@@ -1,4 +1,4 @@
-use crate::{actions::SetKeyPayload as SetPayload, crypto::Signed};
+use crate::{client::SetKeyPayload as SetPayload, crypto::Signed};
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
 

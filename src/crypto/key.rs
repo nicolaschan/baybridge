@@ -18,7 +18,7 @@ fn generate_signing_key() -> SigningKey {
 }
 
 fn decode_signing_key(encoded_string: &str) -> Result<SigningKey> {
-    let bytes: [u8; 32] = string_to_bytes(&encoded_string)?
+    let bytes: [u8; 32] = string_to_bytes(encoded_string)?
         .try_into()
         .map_err(|_e| anyhow!("Expected decoded bytes to be 32 length"))?;
     Ok(SigningKey::from_bytes(&bytes))
@@ -26,7 +26,7 @@ fn decode_signing_key(encoded_string: &str) -> Result<SigningKey> {
 
 fn encode_signing_key(signing_key: &SigningKey) -> String {
     let signing_key_bytes = signing_key.to_bytes();
-    bytes_to_string(&mut signing_key_bytes.as_slice()).unwrap()
+    bytes_to_string(signing_key_bytes.as_slice()).unwrap()
 }
 
 pub struct CryptoKey {
@@ -58,13 +58,14 @@ impl CryptoKey {
 
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
+            .truncate(true)
             .write(true)
             .mode(0o600)
             .open(&config.signing_key_path())
             .await
             .unwrap();
         let encoded_key = encode_signing_key(&signing_key);
-        file.write_all(&encoded_key.as_bytes()).await.unwrap();
+        file.write_all(encoded_key.as_bytes()).await.unwrap();
 
         Self { signing_key }
     }

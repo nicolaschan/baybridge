@@ -9,9 +9,9 @@ use axum::{
     Json,
 };
 use baybridge::{
-    actions::SetKeyPayload,
+    client::SetKeyPayload,
     configuration::Configuration,
-    connection::http::IndexResponse,
+    connectors::http::IndexResponse,
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
@@ -119,5 +119,5 @@ async fn set_key(
         )
         .unwrap();
 
-    return (StatusCode::OK, "OK");
+    (StatusCode::OK, "OK")
 }
