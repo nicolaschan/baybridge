@@ -42,6 +42,12 @@
             lockFile = ./Cargo.lock;
             allowBuiltinFetchGit = true;
           };
+
+          nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
+
+          buildInputs = [
+            pkgs.openssl
+          ];
         };
       }
     );
