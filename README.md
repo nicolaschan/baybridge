@@ -1,15 +1,14 @@
 # Bay Bridge Key-Value Store 🌉
 
+## Usage examples
 ```bash
-bay get bay://bay.example.com/some-key
-bay get bay://bay.example.com/some-key --consistency=strong
+# Start a local server
+baybridge serve
 
-bay sub bay://bay.example.com/some-key
-
-bay set some-key value
-bay set --keyfile=some-key some-key value
-
-bay replica bay://bay.example.com/some-key/*
+# In another shell
+baybridge list
+baybridge set foo bar
+baybridge get $(baybridge whoami) foo # returns bar
 ```
 
 ## Goals
