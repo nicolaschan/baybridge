@@ -1,5 +1,7 @@
 # Bay Bridge Key-Value Store 🌉
 
+> Synchronizing data between San Francisco and Berkeley
+
 ## Installation
 ```bash
 nix run github:nicolaschan/baybridge
@@ -17,6 +19,8 @@ baybridge get "$(baybridge whoami)" foo # returns bar
 ```
 
 ## Goals
+
+> This is a work in progress!
 
 - A global key-value store
 - Support untrusted replicas (this is the main goal!)
