@@ -7,16 +7,21 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        overlays = [ (import rust-overlay) ];
+  outputs = {
+    self,
+    nixpkgs,
+    rust-overlay,
+    flake-utils,
+    ...
+  }:
+    flake-utils.lib.eachDefaultSystem (
+      system: let
+        overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {
           inherit system overlays;
         };
         rustVersion = pkgs.rust-bin.stable.latest.default;
-      in
-      {
+      in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
             rustVersion
@@ -27,6 +32,16 @@
           shellHook = ''
             echo "Rust dev environment ready!"
           '';
+        };
+
+        packages.default = pkgs.rustPlatform.buildRustPackage rec {
+          pname = "baybridge";
+          version = "0.1.0";
+          src = ./.;
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            allowBuiltinFetchGit = true;
+          };
         };
       }
     );
