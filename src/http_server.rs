@@ -11,7 +11,7 @@ use axum::{
 use baybridge::{
     client::SetKeyPayload,
     configuration::Configuration,
-    connectors::http::IndexResponse,
+    connectors::http::{KeyspaceResponse, NamespaceResponse},
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
@@ -43,8 +43,10 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
 
     let app = Router::new()
         .route("/", get(root))
-        .route("/:verifying_key", post(set_key))
-        .route("/:verfiying_key/:address_key", get(get_key))
+        .route("/keyspace/", get(list_keyspace))
+        .route("/keyspace/:verifying_key", post(set_key))
+        .route("/keyspace/:verfiying_key/:address_key", get(get_key))
+        .route("/namespace/:address_key", get(get_namespace))
         .with_state(database);
 
     let bind_address = "0.0.0.0:3000";
@@ -59,6 +61,14 @@ async fn root(State(database): State<Arc<Mutex<Connection>>>) -> impl IntoRespon
     let key_count: usize = database_guard
         .query_row("SELECT COUNT(*) FROM contents", [], |row| row.get(0))
         .unwrap();
+    (
+        StatusCode::OK,
+        format!("A bay bridge server 🌉 with {} keys", key_count),
+    )
+}
+
+async fn list_keyspace(State(database): State<Arc<Mutex<Connection>>>) -> impl IntoResponse {
+    let database_guard = database.lock().await;
     let verifying_keys: Vec<String> = database_guard
         .prepare("SELECT DISTINCT verifying_key FROM contents")
         .unwrap()
@@ -66,13 +76,7 @@ async fn root(State(database): State<Arc<Mutex<Connection>>>) -> impl IntoRespon
         .unwrap()
         .map(|result| result.unwrap())
         .collect();
-    (
-        StatusCode::OK,
-        Json(IndexResponse {
-            message: format!("A bay bridge server 🌉 with {} keys", key_count),
-            verifying_keys,
-        }),
-    )
+    (StatusCode::OK, Json(KeyspaceResponse { verifying_keys }))
 }
 
 async fn get_key(
@@ -93,6 +97,34 @@ async fn get_key(
             (StatusCode::NOT_FOUND, "Not Found".to_string())
         }
     }
+}
+
+async fn get_namespace(
+    Path(key_string): Path<String>,
+    State(database): State<Arc<Mutex<Connection>>>,
+) -> impl IntoResponse {
+    let database_guard = database.lock().await;
+    let mut statement = database_guard
+        .prepare("SELECT verifying_key, value FROM contents WHERE key = ?")
+        .unwrap();
+    let result = statement.query(&[&key_string.as_bytes()]).unwrap();
+    let namespace: Vec<(String, Vec<u8>)> = result
+        .mapped(|row| row.get(0).and_then(|v1| row.get(1).map(|v2| (v1, v2))))
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    let mapping = namespace
+        .into_iter()
+        .map(|(verifying_key, value_bytes)| {
+            (verifying_key, String::from_utf8(value_bytes).unwrap())
+        })
+        .collect();
+    (
+        StatusCode::OK,
+        Json(NamespaceResponse {
+            namespace: key_string,
+            mapping,
+        }),
+    )
 }
 
 async fn set_key(

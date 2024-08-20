@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     client::SetKeyPayload,
     crypto::{
@@ -11,9 +13,14 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 #[derive(Deserialize, Serialize)]
-pub struct IndexResponse {
-    pub message: String,
+pub struct KeyspaceResponse {
     pub verifying_keys: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct NamespaceResponse {
+    pub namespace: String,
+    pub mapping: BTreeMap<String, String>,
 }
 
 pub struct HttpConnection {
@@ -29,7 +36,7 @@ impl HttpConnection {
 
     pub async fn set(&self, payload: Signed<SetKeyPayload>) -> Result<()> {
         let verifying_key_string = encode_verifying_key(&payload.verifying_key);
-        let path = format!("{}/{}", self.url, verifying_key_string);
+        let path = format!("{}/keyspace/{}", self.url, verifying_key_string);
         debug!(
             "Setting {}={} on {}",
             payload.inner.key, payload.inner.value, path
@@ -44,7 +51,7 @@ impl HttpConnection {
 
     pub async fn get(&self, verifying_key: &VerifyingKey, key: &str) -> Result<String> {
         let verifying_key_string = encode_verifying_key(verifying_key);
-        let path = format!("{}/{}/{}", self.url, verifying_key_string, key);
+        let path = format!("{}/keyspace/{}/{}", self.url, verifying_key_string, key);
         debug!("Sending request to {}", path);
         reqwest::Client::new()
             .get(&path)
@@ -56,9 +63,9 @@ impl HttpConnection {
     }
 
     pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
-        let path = self.url.to_string();
+        let path = format!("{}/keyspace/", self.url);
         debug!("Sending request to {}", path);
-        let response: IndexResponse = reqwest::Client::new()
+        let response: KeyspaceResponse = reqwest::Client::new()
             .get(&path)
             .send()
             .await?
