@@ -28,7 +28,7 @@ enum Commands {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Args::parse();
-    let config = Configuration::new();
+    let config = Configuration::default();
 
     config.init().await?;
 

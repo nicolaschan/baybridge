@@ -10,15 +10,17 @@ pub struct Configuration {
 
 impl Default for Configuration {
     fn default() -> Self {
-        Self::new()
+        let base_dir = dirs::config_dir().unwrap().join("baybridge");
+        let connection = Connection::Http(HttpConnection::new("http://localhost:3000"));
+        Self::new(base_dir, connection)
     }
 }
 
 impl Configuration {
-    pub fn new() -> Configuration {
+    pub fn new(base_dir: PathBuf, connection: Connection) -> Configuration {
         Configuration {
-            base_dir: dirs::config_dir().unwrap().join("baybridge"),
-            connection: Connection::Http(HttpConnection::new("http://localhost:3000")),
+            base_dir,
+            connection,
         }
     }
 
