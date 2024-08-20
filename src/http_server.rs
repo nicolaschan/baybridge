@@ -107,7 +107,7 @@ async fn get_namespace(
     let mut statement = database_guard
         .prepare("SELECT verifying_key, value FROM contents WHERE key = ?")
         .unwrap();
-    let result = statement.query(&[&key_string.as_bytes()]).unwrap();
+    let result = statement.query([&key_string.as_bytes()]).unwrap();
     let namespace: Vec<(String, Vec<u8>)> = result
         .mapped(|row| row.get(0).and_then(|v1| row.get(1).map(|v2| (v1, v2))))
         .collect::<rusqlite::Result<_>>()

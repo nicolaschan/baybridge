@@ -2,7 +2,7 @@ use crate::{client::SetKeyPayload as SetPayload, crypto::Signed};
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
 
-use super::http::HttpConnection;
+use super::http::{HttpConnection, NamespaceResponse};
 
 pub enum Connection {
     Http(HttpConnection),
@@ -18,6 +18,12 @@ impl Connection {
     pub async fn get(&self, verifying_key: &VerifyingKey, key: &str) -> Result<String> {
         match self {
             Connection::Http(http) => http.get(verifying_key, key).await,
+        }
+    }
+
+    pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
+        match self {
+            Connection::Http(http) => http.namespace(name).await,
         }
     }
 

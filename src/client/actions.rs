@@ -1,5 +1,6 @@
 use crate::{
     configuration::Configuration,
+    connectors::http::NamespaceResponse,
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         CryptoKey,
@@ -37,6 +38,11 @@ impl Actions {
         let connection = self.config.connection();
         let verifying_key = decode_verifying_key(verifying_key_string)?;
         connection.get(&verifying_key, key).await
+    }
+
+    pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
+        let connection = self.config.connection();
+        connection.namespace(name).await
     }
 
     pub async fn list(&self) -> Result<Vec<VerifyingKey>> {

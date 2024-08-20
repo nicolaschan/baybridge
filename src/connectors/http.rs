@@ -17,7 +17,7 @@ pub struct KeyspaceResponse {
     pub verifying_keys: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct NamespaceResponse {
     pub namespace: String,
     pub mapping: BTreeMap<String, String>,
@@ -60,6 +60,18 @@ impl HttpConnection {
             .text()
             .await
             .map_err(Into::into)
+    }
+
+    pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
+        let path = format!("{}/namespace/{}", self.url, name);
+        debug!("Sending request to {}", path);
+        let response: NamespaceResponse = reqwest::Client::new()
+            .get(&path)
+            .send()
+            .await?
+            .json()
+            .await?;
+        Ok(response)
     }
 
     pub async fn list(&self) -> Result<Vec<VerifyingKey>> {

@@ -16,7 +16,12 @@ baybridge serve
 baybridge list
 baybridge set foo bar
 baybridge get "$(baybridge whoami)" foo # returns bar
+baybridge namespace foo # shows a mapping: $(baybridge whoami) -> bar
 ```
+
+## Design
+
+Each writer is identified with a _Verifying Key_. The _Verifying Key_ definets a
 
 ## Goals
 

@@ -19,6 +19,7 @@ enum Commands {
     Serve,
     Set { key: String, value: String },
     Get { verifying_key: String, key: String },
+    Namespace { name: String },
     List,
     Whoami,
 }
@@ -36,6 +37,10 @@ async fn main() -> Result<()> {
         Commands::Set { key, value } => Actions::new(config).set(key, value).await?,
         Commands::Get { verifying_key, key } => {
             println!("{}", Actions::new(config).get(&verifying_key, &key).await?)
+        }
+        Commands::Namespace { name } => {
+            let namespace = Actions::new(config).namespace(&name).await?;
+            println!("{:?}", namespace);
         }
         Commands::List => {
             let verifying_keys = Actions::new(config).list().await?;
