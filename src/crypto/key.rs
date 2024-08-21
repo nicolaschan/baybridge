@@ -56,14 +56,16 @@ impl CryptoKey {
             config.signing_key_path().display()
         );
 
-        let mut file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .mode(0o600)
-            .open(&config.signing_key_path())
-            .await
-            .unwrap();
+        let mut options = tokio::fs::OpenOptions::new();
+        options.create(true).truncate(true).write(true);
+
+        #[cfg(unix)]
+        {
+            options.mode(0o600);
+        }
+
+        // TODO: set file permissions safely on Windows
+        let mut file = options.open(&config.signing_key_path()).await.unwrap();
         let encoded_key = encode_signing_key(&signing_key);
         file.write_all(encoded_key.as_bytes()).await.unwrap();
 
