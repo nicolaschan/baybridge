@@ -17,8 +17,9 @@ struct Args {
 #[derive(Subcommand, Debug)]
 enum Commands {
     Serve,
-    Set { key: String, value: String },
-    Get { verifying_key: String, key: String },
+    Set { name: String, value: String },
+    Delete { name: String },
+    Get { verifying_key: String, name: String },
     Namespace { name: String },
     List,
     Whoami,
@@ -34,9 +35,13 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Serve => start_http_server(&config).await?,
-        Commands::Set { key, value } => Actions::new(config).set(key, value).await?,
-        Commands::Get { verifying_key, key } => {
-            println!("{}", Actions::new(config).get(&verifying_key, &key).await?)
+        Commands::Set { name, value } => Actions::new(config).set(name, value).await?,
+        Commands::Delete { name } => Actions::new(config).delete(&name).await?,
+        Commands::Get {
+            verifying_key,
+            name,
+        } => {
+            println!("{}", Actions::new(config).get(&verifying_key, &name).await?)
         }
         Commands::Namespace { name } => {
             let namespace = Actions::new(config).namespace(&name).await?;

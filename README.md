@@ -30,7 +30,7 @@ A namespace _N_ for _k_ is the set of addresses where the name is _k_ over all v
 
 ### Reading and writing
 
-To write to the a name in _K_, the write command must be signed by the signing key _S_.
+To write to a name in _K_, the write command must be signed by the signing key _S_.
 
 This way, nodes do not need to trust each other.
 Nodes share the signed write commands and apply the changes according to a conflict resolution strategy.

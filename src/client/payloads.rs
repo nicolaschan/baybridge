@@ -10,3 +10,11 @@ pub struct SetKeyPayload {
 }
 
 impl Signable for SetKeyPayload {}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct DeletionPayload {
+    pub name: String,
+    pub priority: u128,
+}
+
+impl Signable for DeletionPayload {}

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    client::SetKeyPayload,
+    client::{DeletionPayload, SetKeyPayload},
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
@@ -43,6 +43,21 @@ impl HttpConnection {
         );
         reqwest::Client::new()
             .post(&path)
+            .json(&payload)
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete(&self, payload: Signed<DeletionPayload>) -> Result<()> {
+        let verifying_key_string = encode_verifying_key(&payload.verifying_key);
+        let path = format!(
+            "{}/keyspace/{}/{}",
+            self.url, verifying_key_string, payload.inner.name
+        );
+        debug!("Deleting {} on {}", payload.inner.name, path);
+        reqwest::Client::new()
+            .delete(&path)
             .json(&payload)
             .send()
             .await?;

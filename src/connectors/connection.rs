@@ -1,4 +1,7 @@
-use crate::{client::SetKeyPayload as SetPayload, crypto::Signed};
+use crate::{
+    client::{DeletionPayload, SetKeyPayload as SetPayload},
+    crypto::Signed,
+};
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
 
@@ -12,6 +15,12 @@ impl Connection {
     pub async fn set(&self, payload: Signed<SetPayload>) -> Result<()> {
         match self {
             Connection::Http(http) => http.set(payload).await,
+        }
+    }
+
+    pub async fn delete(&self, payload: Signed<DeletionPayload>) -> Result<()> {
+        match self {
+            Connection::Http(http) => http.delete(payload).await,
         }
     }
 

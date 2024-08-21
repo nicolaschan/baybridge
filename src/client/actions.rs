@@ -9,7 +9,7 @@ use crate::{
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
 
-use super::SetKeyPayload;
+use super::{DeletionPayload, SetKeyPayload};
 
 pub struct Actions {
     pub config: Configuration,
@@ -32,6 +32,19 @@ impl Actions {
         let signed = crypto_key.sign(payload);
 
         connection.set(signed).await
+    }
+
+    pub async fn delete(&self, name: &str) -> Result<()> {
+        let mut crypto_key = CryptoKey::from_config(&self.config).await;
+        let connection = self.config.connection();
+
+        let payload = DeletionPayload {
+            name: name.to_string(),
+            priority: 0,
+        };
+        let signed = crypto_key.sign(payload);
+
+        connection.delete(signed).await
     }
 
     pub async fn get(&self, verifying_key_string: &str, key: &str) -> Result<String> {

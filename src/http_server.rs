@@ -9,7 +9,7 @@ use axum::{
     Json,
 };
 use baybridge::{
-    client::SetKeyPayload,
+    client::{DeletionPayload, SetKeyPayload},
     configuration::Configuration,
     connectors::http::{KeyspaceResponse, NamespaceResponse},
     crypto::{
@@ -45,7 +45,10 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
         .route("/", get(root))
         .route("/keyspace/", get(list_keyspace))
         .route("/keyspace/:verifying_key", post(set_key))
-        .route("/keyspace/:verfiying_key/:address_key", get(get_key))
+        .route(
+            "/keyspace/:verfiying_key/:address_key",
+            get(get_key).delete(delete_name),
+        )
         .route("/namespace/:address_key", get(get_namespace))
         .with_state(database);
 
@@ -148,6 +151,29 @@ async fn set_key(
                 payload.inner.key.as_bytes(),
                 payload.inner.value.as_bytes(),
             ),
+        )
+        .unwrap();
+
+    (StatusCode::OK, "OK")
+}
+
+async fn delete_name(
+    Path((verifying_key_string, key_string)): Path<(String, String)>,
+    State(database): State<Arc<Mutex<Connection>>>,
+    Json(payload): Json<Signed<DeletionPayload>>,
+) -> impl IntoResponse {
+    let verifying_key = decode_verifying_key(&verifying_key_string).unwrap();
+    let verified = payload.verify(&verifying_key);
+    if !verified {
+        // Return 403 Forbidden
+        return (StatusCode::FORBIDDEN, "Forbidden");
+    }
+
+    let database_guard = database.lock().await;
+    database_guard
+        .execute(
+            "DELETE FROM contents WHERE verifying_key = ? AND key = ?",
+            (&verifying_key_string, &key_string.as_bytes()),
         )
         .unwrap();
 

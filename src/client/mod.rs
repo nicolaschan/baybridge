@@ -1,5 +1,6 @@
 mod actions;
-mod set;
+mod payloads;
 
 pub use actions::Actions;
-pub use set::SetKeyPayload;
+pub use payloads::DeletionPayload;
+pub use payloads::SetKeyPayload;
