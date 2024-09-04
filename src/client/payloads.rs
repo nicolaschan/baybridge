@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::Signable;
+use crate::{crypto::Signable, models::Value};
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct SetKeyPayload {
     pub key: String,
-    pub value: String,
+    pub value: Value,
     pub priority: u128,
 }
 

@@ -1,6 +1,7 @@
 use crate::{
     client::{DeletionPayload, SetKeyPayload as SetPayload},
     crypto::Signed,
+    models::Value,
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
@@ -24,7 +25,7 @@ impl Connection {
         }
     }
 
-    pub async fn get(&self, verifying_key: &VerifyingKey, key: &str) -> Result<String> {
+    pub async fn get(&self, verifying_key: &VerifyingKey, key: &str) -> Result<Value> {
         match self {
             Connection::Http(http) => http.get(verifying_key, key).await,
         }

@@ -16,6 +16,7 @@ use baybridge::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
     },
+    models::Value,
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
@@ -117,9 +118,7 @@ async fn get_namespace(
         .unwrap();
     let mapping = namespace
         .into_iter()
-        .map(|(verifying_key, value_bytes)| {
-            (verifying_key, String::from_utf8(value_bytes).unwrap())
-        })
+        .map(|(verifying_key, value_bytes)| (verifying_key, Value::new(value_bytes)))
         .collect();
     (
         StatusCode::OK,

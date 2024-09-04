@@ -5,6 +5,7 @@ use crate::{
         encode::{decode_verifying_key, encode_verifying_key},
         CryptoKey,
     },
+    models::Value,
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
@@ -20,7 +21,7 @@ impl Actions {
         Actions { config }
     }
 
-    pub async fn set(&self, key: String, value: String) -> Result<()> {
+    pub async fn set(&self, key: String, value: Value) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
         let connection = self.config.connection();
 
@@ -47,7 +48,7 @@ impl Actions {
         connection.delete(signed).await
     }
 
-    pub async fn get(&self, verifying_key_string: &str, key: &str) -> Result<String> {
+    pub async fn get(&self, verifying_key_string: &str, key: &str) -> Result<Value> {
         let connection = self.config.connection();
         let verifying_key = decode_verifying_key(verifying_key_string)?;
         connection.get(&verifying_key, key).await

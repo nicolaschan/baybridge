@@ -6,6 +6,7 @@ use crate::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
     },
+    models::Value,
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
@@ -20,7 +21,7 @@ pub struct KeyspaceResponse {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NamespaceResponse {
     pub namespace: String,
-    pub mapping: BTreeMap<String, String>,
+    pub mapping: BTreeMap<String, Value>,
 }
 
 pub struct HttpConnection {
@@ -38,7 +39,7 @@ impl HttpConnection {
         let verifying_key_string = encode_verifying_key(&payload.verifying_key);
         let path = format!("{}/keyspace/{}", self.url, verifying_key_string);
         debug!(
-            "Setting {}={} on {}",
+            "Setting {}={:?} on {}",
             payload.inner.key, payload.inner.value, path
         );
         reqwest::Client::new()
@@ -64,7 +65,7 @@ impl HttpConnection {
         Ok(())
     }
 
-    pub async fn get(&self, verifying_key: &VerifyingKey, key: &str) -> Result<String> {
+    pub async fn get(&self, verifying_key: &VerifyingKey, key: &str) -> Result<Value> {
         let verifying_key_string = encode_verifying_key(verifying_key);
         let path = format!("{}/keyspace/{}/{}", self.url, verifying_key_string, key);
         debug!("Sending request to {}", path);
@@ -72,7 +73,7 @@ impl HttpConnection {
             .get(&path)
             .send()
             .await?
-            .text()
+            .json::<Value>()
             .await
             .map_err(Into::into)
     }
