@@ -47,7 +47,7 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
         .route("/keyspace/", get(list_keyspace))
         .route("/keyspace/:verifying_key", post(set_key))
         .route(
-            "/keyspace/:verfiying_key/:address_key",
+            "/keyspace/:verifying_key/:address_key",
             get(get_key).delete(delete_name),
         )
         .route("/namespace/:address_key", get(get_namespace))
