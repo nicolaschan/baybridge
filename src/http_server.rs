@@ -20,7 +20,7 @@ use baybridge::{
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::info;
 
 pub async fn start_http_server(config: &Configuration) -> Result<()> {
     use axum::{routing::get, Router};
@@ -93,14 +93,7 @@ async fn get_key(
         (&verifying_key_string, &key_string.as_bytes()),
         |row| row.get(0),
     );
-    let result_string = result.map(|bytes| String::from_utf8(bytes).unwrap());
-    match result_string {
-        Ok(value) => (StatusCode::OK, value),
-        Err(e) => {
-            warn!("Error getting key: {:?}", e);
-            (StatusCode::NOT_FOUND, "Not Found".to_string())
-        }
-    }
+    (StatusCode::OK, Json(Value::new(result.unwrap())))
 }
 
 async fn get_namespace(
