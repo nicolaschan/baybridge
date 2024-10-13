@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use crate::{
     configuration::Configuration,
     connectors::http::NamespaceResponse,
@@ -7,8 +9,9 @@ use crate::{
     },
     models::Value,
 };
-use anyhow::Result;
+use anyhow::{Error, Result};
 use ed25519_dalek::VerifyingKey;
+use tracing::debug;
 
 use super::{DeletionPayload, SetKeyPayload};
 
@@ -29,14 +32,19 @@ impl Actions {
             key: key,
             value: value,
             priority: 0,
-            expires_at: expires_at
+            expires_at: expires_at,
         };
         let signed = crypto_key.sign(payload);
 
         connection.set(signed).await
     }
-        
-    pub async fn set_with_expires_at(&self, key: String, value: Value, expires_at: u64) -> Result<()> {
+
+    pub async fn set_with_expires_at(
+        &self,
+        key: String,
+        value: Value,
+        expires_at: u64,
+    ) -> Result<()> {
         self.set_internal(key, value, Some(expires_at)).await
     }
 
@@ -60,7 +68,21 @@ impl Actions {
     pub async fn get(&self, verifying_key_string: &str, key: &str) -> Result<Value> {
         let connection = self.config.connection();
         let verifying_key = decode_verifying_key(verifying_key_string)?;
-        connection.get(&verifying_key, key).await
+        let value = connection.get(&verifying_key, key).await?;
+        if let Some(expires_at) = value.expires_at {
+            let unix_timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            if unix_timestamp > expires_at {
+                debug!(
+                    "Key has expired: expires_at={:?}, current_time={:?}",
+                    expires_at, unix_timestamp
+                );
+                return Err(Error::msg("Key has expired"));
+            }
+        }
+        Ok(value)
     }
 
     pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {

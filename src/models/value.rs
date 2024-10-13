@@ -7,20 +7,15 @@ use serde_with::serde_as;
 pub struct Value {
     #[serde_as(as = "Base64")]
     bytes: Vec<u8>,
+    pub expires_at: Option<u64>,
 }
 
 impl Value {
-    pub fn new(bytes: Vec<u8>) -> Value {
-        Value { bytes }
+    pub fn new(bytes: Vec<u8>, expires_at: Option<u64>) -> Value {
+        Value { bytes, expires_at }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
-    }
-}
-
-impl From<Vec<u8>> for Value {
-    fn from(bytes: Vec<u8>) -> Value {
-        Value::new(bytes)
     }
 }

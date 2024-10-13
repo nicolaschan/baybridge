@@ -89,12 +89,17 @@ async fn get_key(
     State(database): State<Arc<Mutex<Connection>>>,
 ) -> impl IntoResponse {
     let database_guard = database.lock().await;
-    let result: rusqlite::Result<Vec<u8>> = database_guard.query_row(
-        "SELECT value FROM contents WHERE verifying_key = ? AND key = ?",
-        (&verifying_key_string, &key_string.as_bytes()),
-        |row| row.get(0),
-    );
-    (StatusCode::OK, Json(Value::new(result.unwrap())))
+    let result: (Vec<u8>, Option<u64>) = database_guard
+        .query_row(
+            "SELECT value, expires_at FROM contents WHERE verifying_key = ? AND key = ?",
+            (&verifying_key_string, &key_string.as_bytes()),
+            |row| {
+                row.get(0)
+                    .and_then(|v: Vec<u8>| row.get(1).map(|e: Option<u64>| (v, e)))
+            },
+        )
+        .unwrap();
+    (StatusCode::OK, Json(Value::new(result.0, result.1)))
 }
 
 async fn get_namespace(
@@ -103,16 +108,24 @@ async fn get_namespace(
 ) -> impl IntoResponse {
     let database_guard = database.lock().await;
     let mut statement = database_guard
-        .prepare("SELECT verifying_key, value FROM contents WHERE key = ?")
+        .prepare("SELECT verifying_key, value, expires_at FROM contents WHERE key = ?")
         .unwrap();
     let result = statement.query([&key_string.as_bytes()]).unwrap();
-    let namespace: Vec<(String, Vec<u8>)> = result
-        .mapped(|row| row.get(0).and_then(|v1| row.get(1).map(|v2| (v1, v2))))
+    let namespace: Vec<(String, Vec<u8>, Option<u64>)> = result
+        .mapped(|row| {
+            Ok((
+                row.get(0).unwrap(),
+                row.get(1).unwrap(),
+                row.get(2).unwrap(),
+            ))
+        })
         .collect::<rusqlite::Result<_>>()
         .unwrap();
     let mapping = namespace
         .into_iter()
-        .map(|(verifying_key, value_bytes)| (verifying_key, Value::new(value_bytes)))
+        .map(|(verifying_key, value_bytes, expires_at)| {
+            (verifying_key, Value::new(value_bytes, expires_at))
+        })
         .collect();
     (
         StatusCode::OK,

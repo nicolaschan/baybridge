@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Serve => start_http_server(&config).await?,
         Commands::Set { name, value } => {
-            let value = Value::new(value.as_bytes().to_vec());
+            let value = Value::new(value.as_bytes().to_vec(), None);
             Actions::new(config).set(name, value).await?
         }
         Commands::Delete { name } => Actions::new(config).delete(&name).await?,
