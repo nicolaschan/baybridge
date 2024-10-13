@@ -21,18 +21,27 @@ impl Actions {
         Actions { config }
     }
 
-    pub async fn set(&self, key: String, value: Value) -> Result<()> {
+    async fn set_internal(&self, key: String, value: Value, expires_at: Option<u64>) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
         let connection = self.config.connection();
 
         let payload = SetKeyPayload {
-            key: key.clone(),
-            value: value.clone(),
+            key: key,
+            value: value,
             priority: 0,
+            expires_at: expires_at
         };
         let signed = crypto_key.sign(payload);
 
         connection.set(signed).await
+    }
+        
+    pub async fn set_with_expires_at(&self, key: String, value: Value, expires_at: u64) -> Result<()> {
+        self.set_internal(key, value, Some(expires_at)).await
+    }
+
+    pub async fn set(&self, key: String, value: Value) -> Result<()> {
+        self.set_internal(key, value, None).await
     }
 
     pub async fn delete(&self, name: &str) -> Result<()> {

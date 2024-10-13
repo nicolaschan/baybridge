@@ -35,7 +35,8 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             verifying_key BLOB NOT NULL,
             key BLOB NOT NULL,
-            value BLOB NOT NULL
+            value BLOB NOT NULL,
+            expires_at INTEGER
         )",
         (),
     )?;

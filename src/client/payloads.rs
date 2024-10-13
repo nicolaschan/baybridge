@@ -7,6 +7,7 @@ pub struct SetKeyPayload {
     pub key: String,
     pub value: Value,
     pub priority: u128,
+    pub expires_at: Option<u64>
 }
 
 impl Signable for SetKeyPayload {}
