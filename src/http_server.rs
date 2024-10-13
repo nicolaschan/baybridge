@@ -20,7 +20,10 @@ use baybridge::{
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
+use tokio::time::{sleep, Duration};
 use tracing::info;
+
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub async fn start_http_server(config: &Configuration) -> Result<()> {
     use axum::{routing::get, Router};
@@ -42,6 +45,14 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
     )?;
 
     let database = Arc::new(Mutex::new(database));
+
+    let database_clone = database.clone();
+    tokio::spawn(async move {
+        loop {
+            cleanup_expired(database_clone);        
+            sleep(Duration::from_secs(10)).await;
+        }
+    });
 
     let app = Router::new()
         .route("/", get(root))
@@ -184,4 +195,22 @@ async fn delete_name(
         .unwrap();
 
     (StatusCode::OK, "OK")
+}
+
+async fn cleanup_expired(
+    database: Arc<Mutex<Connection>>
+) -> Result<()> {
+    let now = SystemTime::now();
+    let since_epoch = now.duration_since(UNIX_EPOCH)
+        .expect("Error finding current epoch for expiry cleanup");
+    let unix_timestamp = since_epoch.as_secs().to_string();
+
+    let database_guard = database.lock().await; 
+    database_guard
+        .execute(
+            "DELETE FROM contents WHERE expires_at <= ?",
+            (&unix_timestamp),
+        )
+        .unwrap();
+    Ok(())
 }
