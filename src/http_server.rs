@@ -49,7 +49,7 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
     let database_clone = database.clone();
     tokio::spawn(async move {
         loop {
-            cleanup_expired(database_clone);        
+            cleanup_expired(&database_clone).await.unwrap(); 
             sleep(Duration::from_secs(10)).await;
         }
     });
@@ -185,7 +185,7 @@ async fn delete_name(
 }
 
 async fn cleanup_expired(
-    database: Arc<Mutex<Connection>>
+    database: &Arc<Mutex<Connection>>
 ) -> Result<()> {
     let now = SystemTime::now();
     let since_epoch = now.duration_since(UNIX_EPOCH)
@@ -196,7 +196,7 @@ async fn cleanup_expired(
     database_guard
         .execute(
             "DELETE FROM contents WHERE expires_at <= ?",
-            (&unix_timestamp),
+            (unix_timestamp,)
         )
         .unwrap();
     Ok(())
