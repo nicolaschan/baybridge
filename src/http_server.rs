@@ -20,7 +20,10 @@ use baybridge::{
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
+use tokio::time::{sleep, Duration};
 use tracing::info;
+
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub async fn start_http_server(config: &Configuration) -> Result<()> {
     use axum::{routing::get, Router};
@@ -35,12 +38,21 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             verifying_key BLOB NOT NULL,
             key BLOB NOT NULL,
-            value BLOB NOT NULL
+            value BLOB NOT NULL,
+            expires_at INTEGER
         )",
         (),
     )?;
 
     let database = Arc::new(Mutex::new(database));
+
+    let database_clone = database.clone();
+    tokio::spawn(async move {
+        loop {
+            cleanup_expired(&database_clone).await.unwrap(); 
+            sleep(Duration::from_secs(10)).await;
+        }
+    });
 
     let app = Router::new()
         .route("/", get(root))
@@ -88,12 +100,17 @@ async fn get_key(
     State(database): State<Arc<Mutex<Connection>>>,
 ) -> impl IntoResponse {
     let database_guard = database.lock().await;
-    let result: rusqlite::Result<Vec<u8>> = database_guard.query_row(
-        "SELECT value FROM contents WHERE verifying_key = ? AND key = ?",
-        (&verifying_key_string, &key_string.as_bytes()),
-        |row| row.get(0),
-    );
-    (StatusCode::OK, Json(Value::new(result.unwrap())))
+    let result: (Vec<u8>, Option<u64>) = database_guard
+        .query_row(
+            "SELECT value, expires_at FROM contents WHERE verifying_key = ? AND key = ?",
+            (&verifying_key_string, &key_string.as_bytes()),
+            |row| {
+                row.get(0)
+                    .and_then(|v: Vec<u8>| row.get(1).map(|e: Option<u64>| (v, e)))
+            },
+        )
+        .unwrap();
+    (StatusCode::OK, Json(Value::new(result.0, result.1)))
 }
 
 async fn get_namespace(
@@ -102,16 +119,24 @@ async fn get_namespace(
 ) -> impl IntoResponse {
     let database_guard = database.lock().await;
     let mut statement = database_guard
-        .prepare("SELECT verifying_key, value FROM contents WHERE key = ?")
+        .prepare("SELECT verifying_key, value, expires_at FROM contents WHERE key = ?")
         .unwrap();
     let result = statement.query([&key_string.as_bytes()]).unwrap();
-    let namespace: Vec<(String, Vec<u8>)> = result
-        .mapped(|row| row.get(0).and_then(|v1| row.get(1).map(|v2| (v1, v2))))
+    let namespace: Vec<(String, Vec<u8>, Option<u64>)> = result
+        .mapped(|row| {
+            Ok((
+                row.get(0).unwrap(),
+                row.get(1).unwrap(),
+                row.get(2).unwrap(),
+            ))
+        })
         .collect::<rusqlite::Result<_>>()
         .unwrap();
     let mapping = namespace
         .into_iter()
-        .map(|(verifying_key, value_bytes)| (verifying_key, Value::new(value_bytes)))
+        .map(|(verifying_key, value_bytes, expires_at)| {
+            (verifying_key, Value::new(value_bytes, expires_at))
+        })
         .collect();
     (
         StatusCode::OK,
@@ -170,4 +195,22 @@ async fn delete_name(
         .unwrap();
 
     (StatusCode::OK, "OK")
+}
+
+async fn cleanup_expired(
+    database: &Arc<Mutex<Connection>>
+) -> Result<()> {
+    let now = SystemTime::now();
+    let since_epoch = now.duration_since(UNIX_EPOCH)
+        .expect("Error finding current epoch for expiry cleanup");
+    let unix_timestamp = since_epoch.as_secs().to_string();
+
+    let database_guard = database.lock().await; 
+    database_guard
+        .execute(
+            "DELETE FROM contents WHERE expires_at <= ?",
+            (unix_timestamp,)
+        )
+        .unwrap();
+    Ok(())
 }
