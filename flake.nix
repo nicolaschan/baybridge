@@ -27,6 +27,8 @@
             rustVersion
             pkgs.cargo-watch
             pkgs.rust-analyzer
+            pkgs.pkg-config
+            pkgs.openssl
           ];
 
           shellHook = ''
@@ -46,8 +48,18 @@
           nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
 
           buildInputs = [
+          pkgs.pkg-config
             pkgs.openssl
           ];
+        };
+
+        packages.docker = pkgs.dockerTools.buildImage {
+          name = "baybridge";
+          tag = "latest";
+          copyToRoot = [
+            self.packages.${system}.default
+          ];
+          config.EntryPoint = [ "/bin/baybridge" ];
         };
       }
     );

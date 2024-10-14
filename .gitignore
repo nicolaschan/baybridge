@@ -3,3 +3,4 @@
 
 # nix
 .direnv
+/result
