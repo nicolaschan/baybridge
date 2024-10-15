@@ -1,5 +1,5 @@
 use crate::{
-    client::{DeletionEvent, Event, RelevantEvents},
+    client::{Event, RelevantEvents},
     crypto::Signed,
     models::Name,
 };
@@ -16,12 +16,6 @@ impl Connection {
     pub async fn set(&self, payload: Signed<Event>) -> Result<()> {
         match self {
             Connection::Http(http) => http.set(payload).await,
-        }
-    }
-
-    pub async fn delete(&self, payload: Signed<DeletionEvent>) -> Result<()> {
-        match self {
-            Connection::Http(http) => http.delete(payload).await,
         }
     }
 

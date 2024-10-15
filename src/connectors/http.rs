@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    client::{DeletionEvent, Event, RelevantEvents},
+    client::{Event, RelevantEvents},
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
@@ -41,21 +41,6 @@ impl HttpConnection {
         debug!("Setting {} on {}", payload.inner.name(), path);
         reqwest::Client::new()
             .post(&path)
-            .json(&payload)
-            .send()
-            .await?;
-        Ok(())
-    }
-
-    pub async fn delete(&self, payload: Signed<DeletionEvent>) -> Result<()> {
-        let verifying_key_string = encode_verifying_key(&payload.verifying_key);
-        let path = format!(
-            "{}/keyspace/{}/{}",
-            self.url, verifying_key_string, payload.inner.name
-        );
-        debug!("Deleting {} on {}", payload.inner.name, path);
-        reqwest::Client::new()
-            .delete(&path)
             .json(&payload)
             .send()
             .await?;

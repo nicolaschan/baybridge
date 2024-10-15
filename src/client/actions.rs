@@ -54,10 +54,10 @@ impl Actions {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
         let connection = self.config.connection();
 
-        let payload = DeletionEvent { name, priority: 0 };
-        let signed = crypto_key.sign(payload);
+        let event = Event::Delete(DeletionEvent { name, priority: 0 });
+        let signed = crypto_key.sign(event);
 
-        connection.delete(signed).await
+        connection.set(signed).await
     }
 
     pub async fn get(&self, verifying_key_string: &str, name: &Name) -> Result<Value> {
