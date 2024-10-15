@@ -17,11 +17,24 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    Serve,
-    Set { name: String, value: String },
-    Delete { name: String },
-    Get { verifying_key: String, name: String },
-    Namespace { name: String },
+    Serve {
+        #[clap(short, long)]
+        peer: Vec<String>,
+    },
+    Set {
+        name: String,
+        value: String,
+    },
+    Delete {
+        name: String,
+    },
+    Get {
+        verifying_key: String,
+        name: String,
+    },
+    Namespace {
+        name: String,
+    },
     List,
     Whoami,
 }
@@ -35,7 +48,7 @@ async fn main() -> Result<()> {
     config.init().await?;
 
     match cli.command {
-        Commands::Serve => start_http_server(&config).await?,
+        Commands::Serve { peer } => start_http_server(&config, peer).await?,
         Commands::Set { name, value } => {
             let value = Value::new(value.as_bytes().to_vec(), None);
             Actions::new(config).set(name, value).await?

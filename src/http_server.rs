@@ -16,7 +16,7 @@ use baybridge::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
     },
-    models::Value,
+    models::{Peers, Value},
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
@@ -25,7 +25,13 @@ use tracing::info;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub async fn start_http_server(config: &Configuration) -> Result<()> {
+#[derive(Clone)]
+pub struct AppState {
+    database: Arc<Mutex<Connection>>,
+    peers: Vec<String>,
+}
+
+pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Result<()> {
     use axum::{routing::get, Router};
     use tokio::net::TcpListener;
 
@@ -45,8 +51,9 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
     )?;
 
     let database = Arc::new(Mutex::new(database));
-
     let database_clone = database.clone();
+    let state = AppState { database, peers };
+
     tokio::spawn(async move {
         loop {
             cleanup_expired(&database_clone).await.unwrap();
@@ -56,6 +63,7 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
 
     let app = Router::new()
         .route("/", get(root))
+        .route("/peers", get(get_peers))
         .route("/keyspace/", get(list_keyspace))
         .route("/keyspace/:verifying_key", post(set_key))
         .route(
@@ -63,7 +71,7 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
             get(get_key).delete(delete_name),
         )
         .route("/namespace/:address_key", get(get_namespace))
-        .with_state(database);
+        .with_state(state);
 
     let bind_address = "0.0.0.0:3000";
     info!("Listening on {}", bind_address);
@@ -72,9 +80,9 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
     Ok(())
 }
 
-async fn root(State(database): State<Arc<Mutex<Connection>>>) -> impl IntoResponse {
-    let database_guard = database.lock().await;
+async fn root(State(state): State<AppState>) -> impl IntoResponse {
     let version = baybridge::built_info::GIT_VERSION.unwrap_or("unknown");
+    let database_guard = state.database.lock().await;
     let key_count: usize = database_guard
         .query_row("SELECT COUNT(*) FROM contents", [], |row| row.get(0))
         .unwrap();
@@ -87,8 +95,15 @@ async fn root(State(database): State<Arc<Mutex<Connection>>>) -> impl IntoRespon
     )
 }
 
-async fn list_keyspace(State(database): State<Arc<Mutex<Connection>>>) -> impl IntoResponse {
-    let database_guard = database.lock().await;
+async fn get_peers(State(state): State<AppState>) -> impl IntoResponse {
+    let peers = Peers {
+        peers: state.peers.clone(),
+    };
+    Json(peers)
+}
+
+async fn list_keyspace(State(state): State<AppState>) -> impl IntoResponse {
+    let database_guard = state.database.lock().await;
     let verifying_keys: Vec<String> = database_guard
         .prepare("SELECT DISTINCT verifying_key FROM contents")
         .unwrap()
@@ -101,9 +116,9 @@ async fn list_keyspace(State(database): State<Arc<Mutex<Connection>>>) -> impl I
 
 async fn get_key(
     Path((verifying_key_string, key_string)): Path<(String, String)>,
-    State(database): State<Arc<Mutex<Connection>>>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let database_guard = database.lock().await;
+    let database_guard = state.database.lock().await;
     let result: (Vec<u8>, Option<u64>) = database_guard
         .query_row(
             "SELECT value, expires_at FROM contents WHERE verifying_key = ? AND key = ?",
@@ -119,9 +134,9 @@ async fn get_key(
 
 async fn get_namespace(
     Path(key_string): Path<String>,
-    State(database): State<Arc<Mutex<Connection>>>,
+    State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let database_guard = database.lock().await;
+    let database_guard = state.database.lock().await;
     let mut statement = database_guard
         .prepare("SELECT verifying_key, value, expires_at FROM contents WHERE key = ?")
         .unwrap();
@@ -153,7 +168,7 @@ async fn get_namespace(
 
 async fn set_key(
     Path(verifying_key_string): Path<String>,
-    State(database): State<Arc<Mutex<Connection>>>,
+    State(state): State<AppState>,
     Json(payload): Json<Signed<SetKeyPayload>>,
 ) -> impl IntoResponse {
     let verifying_key = decode_verifying_key(&verifying_key_string).unwrap();
@@ -163,7 +178,7 @@ async fn set_key(
         return (StatusCode::FORBIDDEN, "Forbidden");
     }
 
-    let database_guard = database.lock().await;
+    let database_guard = state.database.lock().await;
     database_guard
         .execute(
             "INSERT INTO contents (verifying_key, key, value) VALUES (?, ?, ?)",
@@ -180,7 +195,7 @@ async fn set_key(
 
 async fn delete_name(
     Path((verifying_key_string, key_string)): Path<(String, String)>,
-    State(database): State<Arc<Mutex<Connection>>>,
+    State(state): State<AppState>,
     Json(payload): Json<Signed<DeletionPayload>>,
 ) -> impl IntoResponse {
     let verifying_key = decode_verifying_key(&verifying_key_string).unwrap();
@@ -190,7 +205,7 @@ async fn delete_name(
         return (StatusCode::FORBIDDEN, "Forbidden");
     }
 
-    let database_guard = database.lock().await;
+    let database_guard = state.database.lock().await;
     database_guard
         .execute(
             "DELETE FROM contents WHERE verifying_key = ? AND key = ?",
