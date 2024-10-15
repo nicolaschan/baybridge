@@ -49,7 +49,7 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
     let database_clone = database.clone();
     tokio::spawn(async move {
         loop {
-            cleanup_expired(&database_clone).await.unwrap(); 
+            cleanup_expired(&database_clone).await.unwrap();
             sleep(Duration::from_secs(10)).await;
         }
     });
@@ -74,12 +74,16 @@ pub async fn start_http_server(config: &Configuration) -> Result<()> {
 
 async fn root(State(database): State<Arc<Mutex<Connection>>>) -> impl IntoResponse {
     let database_guard = database.lock().await;
+    let version = baybridge::built_info::GIT_VERSION.unwrap_or("unknown");
     let key_count: usize = database_guard
         .query_row("SELECT COUNT(*) FROM contents", [], |row| row.get(0))
         .unwrap();
     (
         StatusCode::OK,
-        format!("A bay bridge server 🌉 with {} keys", key_count),
+        format!(
+            "A bay bridge server (git:{}) 🌉 with {} keys",
+            version, key_count
+        ),
     )
 }
 
@@ -197,19 +201,18 @@ async fn delete_name(
     (StatusCode::OK, "OK")
 }
 
-async fn cleanup_expired(
-    database: &Arc<Mutex<Connection>>
-) -> Result<()> {
+async fn cleanup_expired(database: &Arc<Mutex<Connection>>) -> Result<()> {
     let now = SystemTime::now();
-    let since_epoch = now.duration_since(UNIX_EPOCH)
+    let since_epoch = now
+        .duration_since(UNIX_EPOCH)
         .expect("Error finding current epoch for expiry cleanup");
     let unix_timestamp = since_epoch.as_secs().to_string();
 
-    let database_guard = database.lock().await; 
+    let database_guard = database.lock().await;
     database_guard
         .execute(
             "DELETE FROM contents WHERE expires_at <= ?",
-            (unix_timestamp,)
+            (unix_timestamp,),
         )
         .unwrap();
     Ok(())
