@@ -1,7 +1,9 @@
 use anyhow::Result;
 use baybridge::{
-    client::Actions, configuration::Configuration, crypto::encode::encode_verifying_key,
-    models::Value,
+    client::Actions,
+    configuration::Configuration,
+    crypto::encode::encode_verifying_key,
+    models::{Name, Value},
 };
 use clap::{command, Parser, Subcommand};
 use http_server::start_http_server;
@@ -50,21 +52,26 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Serve { peer } => start_http_server(&config, peer).await?,
         Commands::Set { name, value } => {
-            let value = Value::new(value.as_bytes().to_vec(), None);
+            let name = Name::new(name);
+            let value = Value::new(value.as_bytes().to_vec());
             Actions::new(config).set(name, value).await?
         }
-        Commands::Delete { name } => Actions::new(config).delete(&name).await?,
+        Commands::Delete { name } => {
+            let name = Name::new(name);
+            Actions::new(config).delete(name).await?
+        }
         Commands::Get {
             verifying_key,
             name,
         } => {
+            let name = Name::new(name);
             let value = Actions::new(config).get(&verifying_key, &name).await?;
             let value = String::from_utf8_lossy(value.as_bytes());
             println!("{}", value);
         }
         Commands::Namespace { name } => {
             let namespace = Actions::new(config).namespace(&name).await?;
-            println!("{:?}", namespace);
+            println!("{:?}", namespace.mapping.keys());
         }
         Commands::List => {
             let verifying_keys = Actions::new(config).list().await?;

@@ -1,19 +1,17 @@
-use std::time::SystemTime;
-
 use crate::{
     configuration::Configuration,
     connectors::http::NamespaceResponse,
+    crdt::merge_events,
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         CryptoKey,
     },
-    models::Value,
+    models::{Name, Value},
 };
-use anyhow::{Error, Result};
+use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
-use tracing::debug;
 
-use super::{DeletionPayload, SetKeyPayload};
+use super::{DeletionEvent, Event, SetEvent};
 
 pub struct Actions {
     pub config: Configuration,
@@ -24,65 +22,53 @@ impl Actions {
         Actions { config }
     }
 
-    async fn set_internal(&self, key: String, value: Value, expires_at: Option<u64>) -> Result<()> {
+    async fn set_internal(&self, name: Name, value: Value, expires_at: Option<u64>) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
         let connection = self.config.connection();
 
-        let payload = SetKeyPayload {
-            key,
+        let event = Event::Set(SetEvent {
+            name,
             value,
             priority: 0,
             expires_at,
-        };
-        let signed = crypto_key.sign(payload);
+        });
+        let signed = crypto_key.sign(event);
 
         connection.set(signed).await
     }
 
     pub async fn set_with_expires_at(
         &self,
-        key: String,
+        name: Name,
         value: Value,
         expires_at: u64,
     ) -> Result<()> {
-        self.set_internal(key, value, Some(expires_at)).await
+        self.set_internal(name, value, Some(expires_at)).await
     }
 
-    pub async fn set(&self, key: String, value: Value) -> Result<()> {
-        self.set_internal(key, value, None).await
+    pub async fn set(&self, name: Name, value: Value) -> Result<()> {
+        self.set_internal(name, value, None).await
     }
 
-    pub async fn delete(&self, name: &str) -> Result<()> {
+    pub async fn delete(&self, name: Name) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
         let connection = self.config.connection();
 
-        let payload = DeletionPayload {
-            name: name.to_string(),
-            priority: 0,
-        };
+        let payload = DeletionEvent { name, priority: 0 };
         let signed = crypto_key.sign(payload);
 
         connection.delete(signed).await
     }
 
-    pub async fn get(&self, verifying_key_string: &str, key: &str) -> Result<Value> {
+    pub async fn get(&self, verifying_key_string: &str, name: &Name) -> Result<Value> {
         let connection = self.config.connection();
         let verifying_key = decode_verifying_key(verifying_key_string)?;
-        let value = connection.get(&verifying_key, key).await?;
-        if let Some(expires_at) = value.expires_at {
-            let unix_timestamp = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            if unix_timestamp > expires_at {
-                debug!(
-                    "Key has expired: expires_at={:?}, current_time={:?}",
-                    expires_at, unix_timestamp
-                );
-                return Err(Error::msg("Key has expired"));
-            }
+        let relevant_events = connection.get(&verifying_key, name).await?;
+        let value = merge_events(relevant_events.events);
+        match value {
+            Some(value) => Ok(value),
+            None => Err(anyhow::anyhow!("Value not found")),
         }
-        Ok(value)
     }
 
     pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {

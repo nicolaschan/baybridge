@@ -1,6 +1,8 @@
 mod actions;
-mod payloads;
+mod events;
 
 pub use actions::Actions;
-pub use payloads::DeletionPayload;
-pub use payloads::SetKeyPayload;
+pub use events::DeletionEvent;
+pub use events::Event;
+pub use events::RelevantEvents;
+pub use events::SetEvent;
