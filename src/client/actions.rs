@@ -29,10 +29,10 @@ impl Actions {
         let connection = self.config.connection();
 
         let payload = SetKeyPayload {
-            key: key,
-            value: value,
+            key,
+            value,
             priority: 0,
-            expires_at: expires_at,
+            expires_at,
         };
         let signed = crypto_key.sign(payload);
 
