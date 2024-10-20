@@ -26,6 +26,7 @@ enum Commands {
     Set {
         name: String,
         value: String,
+        expires_at: Option<u64>,
     },
     Delete {
         name: String,
@@ -51,10 +52,13 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Serve { peer } => start_http_server(&config, peer).await?,
-        Commands::Set { name, value } => {
+        Commands::Set { name, value, expires_at } => {
             let name = Name::new(name);
             let value = Value::new(value.as_bytes().to_vec());
-            Actions::new(config).set(name, value).await?
+            match expires_at {
+                None => Actions::new(config).set(name, value).await?,
+                Some(expires_at) => Actions::new(config).set_with_expires_at(name, value, expires_at).await?
+            }
         }
         Commands::Delete { name } => {
             let name = Name::new(name);
