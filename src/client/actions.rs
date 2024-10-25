@@ -1,3 +1,5 @@
+use std::time::UNIX_EPOCH;
+
 use crate::{
     configuration::Configuration,
     connectors::http::NamespaceResponse,
@@ -29,7 +31,7 @@ impl Actions {
         let event = Event::Set(SetEvent {
             name,
             value,
-            priority: 0,
+            priority: UNIX_EPOCH.elapsed().unwrap().as_millis() as u64,
             expires_at,
         });
         let signed = crypto_key.sign(event);
