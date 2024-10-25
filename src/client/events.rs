@@ -52,6 +52,13 @@ impl Event {
             Event::Delete(_) => None,
         }
     }
+
+    pub fn value(&self) -> Option<Value> {
+        match self {
+            Event::Set(event) => Some(event.value.clone()),
+            Event::Delete(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize)]

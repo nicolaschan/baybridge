@@ -64,6 +64,7 @@ impl Actions {
         let connection = self.config.connection();
         let verifying_key = decode_verifying_key(verifying_key_string)?;
         let relevant_events = connection.get(&verifying_key, name).await?;
+        // TODO: filter by ttl and verify events
         let value = merge_events(relevant_events.events);
         match value {
             Some(value) => Ok(value),
