@@ -26,7 +26,7 @@ fn decode_signing_key(encoded_string: &str) -> Result<SigningKey> {
 
 fn encode_signing_key(signing_key: &SigningKey) -> String {
     let signing_key_bytes = signing_key.to_bytes();
-    bytes_to_string(signing_key_bytes.as_slice()).unwrap()
+    bytes_to_string(signing_key_bytes.as_slice())
 }
 
 pub struct CryptoKey {

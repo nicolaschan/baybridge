@@ -1,5 +1,7 @@
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use serde_with::base64::Base64;
+use serde_with::serde_as;
 
 pub trait Signable: Clone + Serialize {}
 
@@ -11,10 +13,13 @@ pub struct Signed<T: Signable> {
     pub signature: Signature,
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize)]
 pub struct SerializableSigned<T> {
     pub inner: T,
+    #[serde_as(as = "Base64")]
     pub verifying_key: Vec<u8>,
+    #[serde_as(as = "Base64")]
     pub signature: Vec<u8>,
 }
 
