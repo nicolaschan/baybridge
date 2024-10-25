@@ -26,6 +26,10 @@ enum Commands {
     Set {
         name: String,
         value: String,
+        // Time to live in seconds
+        #[clap(short, long)]
+        ttl: Option<u64>,
+        // Explicit unix timestamp expires at
         expires_at: Option<u64>,
     },
     Delete {
@@ -52,12 +56,32 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Serve { peer } => start_http_server(&config, peer).await?,
-        Commands::Set { name, value, expires_at } => {
+        Commands::Set {
+            name,
+            value,
+            ttl,
+            expires_at,
+        } => {
             let name = Name::new(name);
             let value = Value::new(value.as_bytes().to_vec());
+            let expires_at = match ttl {
+                Some(ttl) => Some(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs()
+                        + ttl,
+                ),
+                None => expires_at,
+            };
+
             match expires_at {
                 None => Actions::new(config).set(name, value).await?,
-                Some(expires_at) => Actions::new(config).set_with_expires_at(name, value, expires_at).await?
+                Some(expires_at) => {
+                    Actions::new(config)
+                        .set_with_expires_at(name, value, expires_at)
+                        .await?
+                }
             }
         }
         Commands::Delete { name } => {
