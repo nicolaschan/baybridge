@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use axum::{
@@ -9,16 +9,17 @@ use axum::{
     Json,
 };
 use baybridge::{
-    client::{DeletionPayload, SetKeyPayload},
+    client::{Event, RelevantEvents},
     configuration::Configuration,
     connectors::http::{KeyspaceResponse, NamespaceResponse},
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
     },
-    models::{Peers, Value},
+    models::Peers,
 };
-use rusqlite::Connection;
+use itertools::Itertools;
+use rusqlite::{params, Connection};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use tracing::info;
@@ -40,11 +41,12 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
     let database = Connection::open(database_path)?;
 
     database.execute(
-        "CREATE TABLE IF NOT EXISTS contents (
+        "CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             verifying_key BLOB NOT NULL,
-            key BLOB NOT NULL,
-            value BLOB NOT NULL,
+            name BLOB NOT NULL,
+            signed_event BLOB NOT NULL UNIQUE,
+            priority BIGINT NOT NULL,
             expires_at INTEGER
         )",
         (),
@@ -65,11 +67,8 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
         .route("/", get(root))
         .route("/peers", get(get_peers))
         .route("/keyspace/", get(list_keyspace))
-        .route("/keyspace/:verifying_key", post(set_key))
-        .route(
-            "/keyspace/:verifying_key/:address_key",
-            get(get_key).delete(delete_name),
-        )
+        .route("/keyspace/:verifying_key", post(set_event))
+        .route("/keyspace/:verifying_key/:address_key", get(get_name))
         .route("/namespace/:address_key", get(get_namespace))
         .with_state(state);
 
@@ -84,7 +83,7 @@ async fn root(State(state): State<AppState>) -> impl IntoResponse {
     let version = baybridge::built_info::GIT_VERSION.unwrap_or("unknown");
     let database_guard = state.database.lock().await;
     let key_count: usize = database_guard
-        .query_row("SELECT COUNT(*) FROM contents", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
         .unwrap();
     (
         StatusCode::OK,
@@ -105,7 +104,7 @@ async fn get_peers(State(state): State<AppState>) -> impl IntoResponse {
 async fn list_keyspace(State(state): State<AppState>) -> impl IntoResponse {
     let database_guard = state.database.lock().await;
     let verifying_keys: Vec<String> = database_guard
-        .prepare("SELECT DISTINCT verifying_key FROM contents")
+        .prepare("SELECT DISTINCT verifying_key FROM events")
         .unwrap()
         .query_map([], |row| row.get(0))
         .unwrap()
@@ -114,62 +113,60 @@ async fn list_keyspace(State(state): State<AppState>) -> impl IntoResponse {
     (StatusCode::OK, Json(KeyspaceResponse { verifying_keys }))
 }
 
-async fn get_key(
-    Path((verifying_key_string, key_string)): Path<(String, String)>,
+async fn get_name(
+    Path((verifying_key_string, name_string)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let database_guard = state.database.lock().await;
-    let result: (Vec<u8>, Option<u64>) = database_guard
-        .query_row(
-            "SELECT value, expires_at FROM contents WHERE verifying_key = ? AND key = ?",
-            (&verifying_key_string, &key_string.as_bytes()),
+    let events = database_guard
+        .prepare("SELECT signed_event FROM events WHERE verifying_key = ? AND name = ?")
+        .unwrap()
+        .query_map(
+            params![&verifying_key_string, name_string.as_bytes()],
             |row| {
-                row.get(0)
-                    .and_then(|v: Vec<u8>| row.get(1).map(|e: Option<u64>| (v, e)))
+                let signed_event_serialized: Vec<u8> = row.get(0)?;
+                let signed_event: Signed<Event> =
+                    bincode::deserialize(&signed_event_serialized).unwrap();
+                Ok(signed_event)
             },
         )
-        .unwrap();
-    (StatusCode::OK, Json(Value::new(result.0, result.1)))
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
+    (StatusCode::OK, Json(RelevantEvents { events }))
 }
 
 async fn get_namespace(
-    Path(key_string): Path<String>,
+    Path(name_string): Path<String>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let database_guard = state.database.lock().await;
-    let mut statement = database_guard
-        .prepare("SELECT verifying_key, value, expires_at FROM contents WHERE key = ?")
-        .unwrap();
-    let result = statement.query([&key_string.as_bytes()]).unwrap();
-    let namespace: Vec<(String, Vec<u8>, Option<u64>)> = result
-        .mapped(|row| {
-            Ok((
-                row.get(0).unwrap(),
-                row.get(1).unwrap(),
-                row.get(2).unwrap(),
-            ))
+    let event_mapping: HashMap<String, Vec<Signed<Event>>> = database_guard
+        .prepare("SELECT verifying_key, signed_event FROM events WHERE name = ?")
+        .unwrap()
+        .query_map([&name_string.as_bytes()], |row| {
+            let verifying_key: String = row.get(0)?;
+            let signed_event_serialized: Vec<u8> = row.get(1)?;
+            let signed_event: Signed<Event> =
+                bincode::deserialize(&signed_event_serialized).unwrap();
+            Ok((verifying_key, signed_event))
         })
-        .collect::<rusqlite::Result<_>>()
-        .unwrap();
-    let mapping = namespace
-        .into_iter()
-        .map(|(verifying_key, value_bytes, expires_at)| {
-            (verifying_key, Value::new(value_bytes, expires_at))
-        })
-        .collect();
+        .unwrap()
+        .filter_map(Result::ok)
+        .into_group_map();
     (
         StatusCode::OK,
         Json(NamespaceResponse {
-            namespace: key_string,
-            mapping,
+            namespace: name_string,
+            mapping: event_mapping,
         }),
     )
 }
 
-async fn set_key(
+async fn set_event(
     Path(verifying_key_string): Path<String>,
     State(state): State<AppState>,
-    Json(payload): Json<Signed<SetKeyPayload>>,
+    Json(payload): Json<Signed<Event>>,
 ) -> impl IntoResponse {
     let verifying_key = decode_verifying_key(&verifying_key_string).unwrap();
     let verified = payload.verify(&verifying_key);
@@ -178,38 +175,17 @@ async fn set_key(
         return (StatusCode::FORBIDDEN, "Forbidden");
     }
 
-    let database_guard = state.database.lock().await;
-    database_guard
-        .execute(
-            "INSERT INTO contents (verifying_key, key, value) VALUES (?, ?, ?)",
-            (
-                &encode_verifying_key(&verifying_key), // Use the normalized key
-                payload.inner.key.as_bytes(),
-                payload.inner.value.as_bytes(),
-            ),
-        )
-        .unwrap();
-
-    (StatusCode::OK, "OK")
-}
-
-async fn delete_name(
-    Path((verifying_key_string, key_string)): Path<(String, String)>,
-    State(state): State<AppState>,
-    Json(payload): Json<Signed<DeletionPayload>>,
-) -> impl IntoResponse {
-    let verifying_key = decode_verifying_key(&verifying_key_string).unwrap();
-    let verified = payload.verify(&verifying_key);
-    if !verified {
-        // Return 403 Forbidden
-        return (StatusCode::FORBIDDEN, "Forbidden");
-    }
+    let normalized_verifying_key = encode_verifying_key(&verifying_key);
+    let name = payload.inner.name().as_str().as_bytes();
+    let signed_event_serialized = bincode::serialize(&payload).unwrap();
+    let priority = payload.inner.priority();
+    let expires_at = payload.inner.expires_at();
 
     let database_guard = state.database.lock().await;
     database_guard
         .execute(
-            "DELETE FROM contents WHERE verifying_key = ? AND key = ?",
-            (&verifying_key_string, &key_string.as_bytes()),
+            "INSERT INTO events (verifying_key, name, signed_event, priority, expires_at) VALUES (?, ?, ?, ?, ?)",
+            params![normalized_verifying_key, name, signed_event_serialized, priority, expires_at],
         )
         .unwrap();
 
@@ -226,7 +202,7 @@ async fn cleanup_expired(database: &Arc<Mutex<Connection>>) -> Result<()> {
     let database_guard = database.lock().await;
     database_guard
         .execute(
-            "DELETE FROM contents WHERE expires_at <= ?",
+            "DELETE FROM events WHERE expires_at <= ?",
             (unix_timestamp,),
         )
         .unwrap();

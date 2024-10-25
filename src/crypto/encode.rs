@@ -1,13 +1,13 @@
 use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose::URL_SAFE, Engine};
 use ed25519_dalek::VerifyingKey;
 
-pub fn bytes_to_string(mut bytes: &[u8]) -> Result<String> {
-    Ok(ecoji::encode_to_string(&mut bytes)?)
+pub fn bytes_to_string(bytes: &[u8]) -> String {
+    URL_SAFE.encode(bytes)
 }
 
 pub fn string_to_bytes(encoded: &str) -> Result<Vec<u8>> {
-    let mut encoded = encoded.as_bytes();
-    Ok(ecoji::decode_to_vec(&mut encoded)?)
+    URL_SAFE.decode(encoded.as_bytes()).map_err(|e| anyhow!(e))
 }
 
 pub fn decode_verifying_key(verifying_key_string: &str) -> Result<VerifyingKey> {
@@ -20,5 +20,5 @@ pub fn decode_verifying_key(verifying_key_string: &str) -> Result<VerifyingKey> 
 
 pub fn encode_verifying_key(verifying_key: &VerifyingKey) -> String {
     let verifying_key_bytes = verifying_key.to_bytes();
-    bytes_to_string(&verifying_key_bytes).unwrap()
+    bytes_to_string(&verifying_key_bytes)
 }
