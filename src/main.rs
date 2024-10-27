@@ -120,7 +120,9 @@ async fn main() -> Result<()> {
         }
         Commands::Namespace { name } => {
             let namespace = Actions::new(config).namespace(&name).await?;
-            println!("{:?}", namespace.mapping.keys());
+            for (name, value) in namespace.mapping {
+                println!("{}: {}", name, String::from_utf8_lossy(value.as_bytes()));
+            }
         }
         Commands::List => {
             let verifying_keys = Actions::new(config).list().await?;

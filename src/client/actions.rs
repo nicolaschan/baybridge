@@ -8,7 +8,7 @@ use crate::{
         encode::{decode_verifying_key, encode_verifying_key},
         CryptoKey,
     },
-    models::{Name, Value},
+    models::{Name, NamespaceValues, Value},
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
@@ -95,7 +95,7 @@ impl Actions {
         }
     }
 
-    pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
+    pub async fn namespace(&self, name: &str) -> Result<NamespaceValues> {
         let namespace_futures = self
             .config
             .get_connections()
@@ -106,10 +106,26 @@ impl Actions {
             .into_iter()
             .filter_map(Result::ok)
             .collect();
-        match NamespaceResponse::merge_vec(namespace_responses) {
+        let merged_namespace = (match NamespaceResponse::merge_vec(namespace_responses) {
             Some(response) => Ok(response),
             None => Err(anyhow::anyhow!("Namespace not found")),
-        }
+        })?;
+        let value_mapping = merged_namespace
+            .mapping
+            .iter()
+            .map(|(k, v)| {
+                let value = merge_events(v.clone());
+                match value {
+                    Some(value) => Ok((k.clone(), value)),
+                    None => Err(anyhow::anyhow!("Value not found")),
+                }
+            })
+            .filter_map(Result::ok)
+            .collect();
+        Ok(NamespaceValues {
+            namespace: merged_namespace.namespace,
+            mapping: value_mapping,
+        })
     }
 
     pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
