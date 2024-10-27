@@ -20,3 +20,9 @@ impl Name {
         &self.0
     }
 }
+
+impl From<&str> for Name {
+    fn from(name: &str) -> Self {
+        Name(name.to_string())
+    }
+}

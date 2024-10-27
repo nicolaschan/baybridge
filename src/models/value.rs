@@ -18,3 +18,11 @@ impl Value {
         &self.bytes
     }
 }
+
+impl From<&[u8]> for Value {
+    fn from(bytes: &[u8]) -> Self {
+        Value {
+            bytes: bytes.to_vec(),
+        }
+    }
+}
