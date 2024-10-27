@@ -1,7 +1,10 @@
+use std::{path::PathBuf, str::FromStr};
+
 use anyhow::Result;
 use baybridge::{
     client::Actions,
     configuration::Configuration,
+    connectors::{connection::Connection, http::HttpConnection},
     crypto::encode::encode_verifying_key,
     models::{Name, Value},
 };
@@ -15,6 +18,10 @@ mod http_server;
 struct Args {
     #[command(subcommand)]
     command: Commands,
+    #[clap(short, long)]
+    config_dir: Option<String>,
+    #[clap(short, long)]
+    server: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -50,8 +57,22 @@ enum Commands {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let cli = Args::parse();
-    let config = Configuration::default();
 
+    let config_dir = cli
+        .config_dir
+        .map(|path| PathBuf::from_str(&path).unwrap())
+        .unwrap_or_else(|| dirs::data_dir().unwrap_or("/tmp".into()).join("baybridge"));
+    let servers = if cli.server.is_empty() {
+        vec![String::from("http://localhost:3000")]
+    } else {
+        cli.server
+    };
+    let servers = servers
+        .into_iter()
+        .map(|s| Connection::Http(HttpConnection::new(&s)))
+        .collect();
+
+    let config = Configuration::new(config_dir, servers);
     config.init().await?;
 
     match cli.command {

@@ -12,6 +12,7 @@ use crate::{
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
+use futures::future::join_all;
 
 use super::{DeletionEvent, Event, SetEvent};
 
@@ -26,7 +27,6 @@ impl Actions {
 
     async fn set_internal(&self, name: Name, value: Value, expires_at: Option<u64>) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
-        let connection = self.config.connection();
 
         let event = Event::Set(SetEvent {
             name,
@@ -36,7 +36,13 @@ impl Actions {
         });
         let signed = crypto_key.sign(event);
 
-        connection.set(signed).await
+        let set_futures = self
+            .config
+            .get_connections()
+            .iter()
+            .map(|connection| connection.set(signed.clone()));
+        join_all(set_futures).await;
+        Ok(())
     }
 
     pub async fn set_with_expires_at(
@@ -54,20 +60,35 @@ impl Actions {
 
     pub async fn delete(&self, name: Name) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
-        let connection = self.config.connection();
 
         let event = Event::Delete(DeletionEvent { name, priority: 0 });
         let signed = crypto_key.sign(event);
 
-        connection.set(signed).await
+        let set_futures = self
+            .config
+            .get_connections()
+            .iter()
+            .map(|conn| conn.set(signed.clone()));
+        join_all(set_futures).await;
+        Ok(())
     }
 
     pub async fn get(&self, verifying_key_string: &str, name: &Name) -> Result<Value> {
-        let connection = self.config.connection();
         let verifying_key = decode_verifying_key(verifying_key_string)?;
-        let relevant_events = connection.get(&verifying_key, name).await?;
+        let relevant_events_futures = self
+            .config
+            .get_connections()
+            .iter()
+            .map(|conn| conn.get(&verifying_key, name))
+            .collect::<Vec<_>>();
+        let combined_events = join_all(relevant_events_futures)
+            .await
+            .into_iter()
+            .filter_map(Result::ok)
+            .flat_map(|events| events.events.into_iter())
+            .collect();
         // TODO: filter by ttl and verify events
-        let value = merge_events(relevant_events.events);
+        let value = merge_events(combined_events);
         match value {
             Some(value) => Ok(value),
             None => Err(anyhow::anyhow!("Value not found")),
@@ -75,13 +96,30 @@ impl Actions {
     }
 
     pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
-        let connection = self.config.connection();
-        connection.namespace(name).await
+        let namespace_futures = self
+            .config
+            .get_connections()
+            .iter()
+            .map(|conn| conn.namespace(name));
+        let namespace_responses = join_all(namespace_futures)
+            .await
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect();
+        match NamespaceResponse::merge_vec(namespace_responses) {
+            Some(response) => Ok(response),
+            None => Err(anyhow::anyhow!("Namespace not found")),
+        }
     }
 
     pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
-        let connection = self.config.connection();
-        connection.list().await
+        let list_futures = self.config.get_connections().iter().map(|conn| conn.list());
+        Ok(join_all(list_futures)
+            .await
+            .into_iter()
+            .filter_map(Result::ok)
+            .flatten()
+            .collect::<Vec<_>>())
     }
 
     pub async fn whoami(&self) -> String {

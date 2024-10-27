@@ -24,6 +24,26 @@ pub struct NamespaceResponse {
     pub mapping: HashMap<String, Vec<Signed<Event>>>,
 }
 
+impl NamespaceResponse {
+    pub fn merge(&mut self, other: NamespaceResponse) {
+        for (key, events) in other.mapping {
+            self.mapping
+                .entry(key)
+                .and_modify(|existing| existing.extend(events.clone()))
+                .or_insert(events);
+        }
+    }
+
+    pub fn merge_vec(namespace_responses: Vec<NamespaceResponse>) -> Option<NamespaceResponse> {
+        let mut namespace_responses = namespace_responses.into_iter();
+        let mut merged = namespace_responses.next()?;
+        for response in namespace_responses {
+            merged.merge(response);
+        }
+        Some(merged)
+    }
+}
+
 pub struct HttpConnection {
     url: String,
 }
