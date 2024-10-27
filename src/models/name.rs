@@ -21,8 +21,8 @@ impl Name {
     }
 }
 
-impl From<&str> for Name {
-    fn from(name: &str) -> Self {
-        Name(name.to_string())
+impl From<String> for Name {
+    fn from(name: String) -> Self {
+        Name(name)
     }
 }
