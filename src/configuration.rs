@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
+use tracing::debug;
 
 use crate::connectors::{connection::Connection, http::HttpConnection};
 
@@ -25,6 +26,7 @@ impl Configuration {
     }
 
     pub async fn init(&self) -> Result<()> {
+        debug!("Creating base directory: {:?}", self.base_dir);
         tokio::fs::create_dir_all(&self.base_dir).await?;
         Ok(())
     }
