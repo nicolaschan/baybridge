@@ -46,12 +46,18 @@ impl NamespaceResponse {
 
 pub struct HttpConnection {
     url: String,
+    client: reqwest::Client,
 }
 
 impl HttpConnection {
     pub fn new(url: &str) -> HttpConnection {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
         HttpConnection {
             url: url.to_string(),
+            client,
         }
     }
 
@@ -59,11 +65,7 @@ impl HttpConnection {
         let verifying_key_string = encode_verifying_key(&payload.verifying_key);
         let path = format!("{}/keyspace/{}", self.url, verifying_key_string);
         debug!("Setting {} on {}", payload.inner.name(), path);
-        reqwest::Client::new()
-            .post(&path)
-            .json(&payload)
-            .send()
-            .await?;
+        self.client.post(&path).json(&payload).send().await?;
         Ok(())
     }
 
@@ -71,7 +73,7 @@ impl HttpConnection {
         let verifying_key_string = encode_verifying_key(verifying_key);
         let path = format!("{}/keyspace/{}/{}", self.url, verifying_key_string, name);
         debug!("Sending request to {}", path);
-        reqwest::Client::new()
+        self.client
             .get(&path)
             .send()
             .await?
@@ -83,24 +85,14 @@ impl HttpConnection {
     pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
         let path = format!("{}/namespace/{}", self.url, name);
         debug!("Sending request to {}", path);
-        let response: NamespaceResponse = reqwest::Client::new()
-            .get(&path)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let response: NamespaceResponse = self.client.get(&path).send().await?.json().await?;
         Ok(response)
     }
 
     pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
         let path = format!("{}/keyspace/", self.url);
         debug!("Sending request to {}", path);
-        let response: KeyspaceResponse = reqwest::Client::new()
-            .get(&path)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let response: KeyspaceResponse = self.client.get(&path).send().await?.json().await?;
         let verifying_keys = response
             .verifying_keys
             .iter()
