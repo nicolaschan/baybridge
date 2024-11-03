@@ -1,4 +1,4 @@
-use std::time::UNIX_EPOCH;
+use std::{collections::HashMap, time::UNIX_EPOCH};
 
 use crate::{
     configuration::Configuration,
@@ -6,13 +6,14 @@ use crate::{
     crdt::merge_events,
     crypto::{
         encode::{decode_verifying_key, encode_verifying_key},
-        CryptoKey,
+        CryptoKey, Signed,
     },
     models::{Name, NamespaceValues, Value},
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
 use futures::future::join_all;
+use itertools::Itertools;
 
 use super::{DeletionEvent, Event, SetEvent};
 
@@ -110,13 +111,17 @@ impl Actions {
             Some(response) => Ok(response),
             None => Err(anyhow::anyhow!("Namespace not found")),
         })?;
-        let value_mapping = merged_namespace
-            .mapping
+        let event_mapping: HashMap<VerifyingKey, Vec<Signed<Event>>> = merged_namespace
+            .events
+            .into_iter()
+            .map(|event| (event.verifying_key, event))
+            .into_group_map();
+        let value_mapping = event_mapping
             .iter()
             .map(|(k, v)| {
                 let value = merge_events(v.clone());
                 match value {
-                    Some(value) => Ok((k.clone(), value)),
+                    Some(value) => Ok((*k, value)),
                     None => Err(anyhow::anyhow!("Value not found")),
                 }
             })
@@ -126,16 +131,6 @@ impl Actions {
             namespace: merged_namespace.namespace,
             mapping: value_mapping,
         })
-    }
-
-    pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
-        let list_futures = self.config.get_connections().iter().map(|conn| conn.list());
-        Ok(join_all(list_futures)
-            .await
-            .into_iter()
-            .filter_map(Result::ok)
-            .flatten()
-            .collect::<Vec<_>>())
     }
 
     pub async fn whoami(&self) -> String {

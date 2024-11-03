@@ -30,10 +30,4 @@ impl Connection {
             Connection::Http(http) => http.namespace(name).await,
         }
     }
-
-    pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
-        match self {
-            Connection::Http(http) => http.list().await,
-        }
-    }
 }

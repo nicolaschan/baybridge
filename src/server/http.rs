@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use axum::{
@@ -8,29 +8,22 @@ use axum::{
     routing::post,
     Json,
 };
-use itertools::Itertools;
-use rusqlite::{params, Connection};
 use tokio::sync::{Mutex, MutexGuard};
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::{
     client::{Event, RelevantEvents},
     configuration::Configuration,
-    connectors::http::{KeyspaceResponse, NamespaceResponse},
-    crypto::{
-        encode::{decode_verifying_key, encode_verifying_key},
-        Signed,
-    },
+    connectors::http::NamespaceResponse,
+    crypto::{encode::decode_verifying_key, Signed},
     models::{self, Peers},
-    server::gc_expired,
+    server::{sqlite_controller::SqliteController, tasks::gc_expired},
 };
 
 #[derive(Clone)]
 pub struct AppState {
-    database: Arc<Mutex<Connection>>,
+    database: Arc<Mutex<SqliteController>>,
     peers: Vec<String>,
 }
 
@@ -40,19 +33,7 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 
     let database_path = config.server_database_path();
     info!("Using database at {}", database_path.display());
-    let database = Connection::open(database_path)?;
-
-    database.execute(
-        "CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            verifying_key BLOB NOT NULL,
-            name BLOB NOT NULL,
-            signed_event BLOB NOT NULL UNIQUE,
-            priority BIGINT NOT NULL,
-            expires_at INTEGER
-        )",
-        (),
-    )?;
+    let database = SqliteController::new(&database_path)?;
 
     let database = Arc::new(Mutex::new(database));
     let database_clone = database.clone();
@@ -69,7 +50,6 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
         .route("/", get(root))
         .route("/state", get(current_state))
         .route("/peers", get(get_peers))
-        .route("/keyspace/", get(list_keyspace))
         .route("/keyspace/:verifying_key", post(set_event))
         .route("/keyspace/:verifying_key/:address_key", get(get_name))
         .route("/namespace/:address_key", get(get_namespace))
@@ -87,13 +67,11 @@ async fn root(State(state): State<AppState>) -> impl IntoResponse {
     let version = "unknown";
     let database_guard = state.database.lock().await;
     let current_state = current_state_hash(&database_guard);
-    let key_count: usize = database_guard
-        .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
-        .unwrap();
+    let key_count: usize = database_guard.event_count().unwrap();
     (
         StatusCode::OK,
         format!(
-            "A bay bridge server (git:{}) 🌉 with {} keys, state: {}",
+            "A bay bridge server (git:{}) 🌉 with {} events, state: {}",
             version, key_count, current_state
         ),
     )
@@ -105,20 +83,9 @@ async fn current_state(State(state): State<AppState>) -> impl IntoResponse {
     Json(models::Hash(hash))
 }
 
-fn current_state_hash(database_guard: &MutexGuard<'_, Connection>) -> blake3::Hash {
-    let all_events = database_guard
-        .prepare("SELECT signed_event FROM events ORDER BY signed_event ASC")
-        .unwrap()
-        .query_map([], |row| {
-            let signed_event_serialized: Vec<u8> = row.get(0)?;
-            let signed_event: Signed<Event> =
-                bincode::deserialize(&signed_event_serialized).unwrap();
-            Ok(signed_event)
-        })
-        .unwrap()
-        .filter_map(Result::ok)
-        .collect::<Vec<Signed<Event>>>();
-    let serialized_events = bincode::serialize(&all_events).unwrap();
+fn current_state_hash(database_guard: &MutexGuard<'_, SqliteController>) -> blake3::Hash {
+    let all_signed_events = database_guard.signed_events().unwrap();
+    let serialized_events = bincode::serialize(&all_signed_events).unwrap();
     blake3::hash(&serialized_events)
 }
 
@@ -129,38 +96,14 @@ async fn get_peers(State(state): State<AppState>) -> impl IntoResponse {
     Json(peers)
 }
 
-async fn list_keyspace(State(state): State<AppState>) -> impl IntoResponse {
-    let database_guard = state.database.lock().await;
-    let verifying_keys: Vec<String> = database_guard
-        .prepare("SELECT DISTINCT verifying_key FROM events")
-        .unwrap()
-        .query_map([], |row| row.get(0))
-        .unwrap()
-        .map(|result| result.unwrap())
-        .collect();
-    (StatusCode::OK, Json(KeyspaceResponse { verifying_keys }))
-}
-
 async fn get_name(
     Path((verifying_key_string, name_string)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let database_guard = state.database.lock().await;
     let events = database_guard
-        .prepare("SELECT signed_event FROM events WHERE verifying_key = ? AND name = ?")
-        .unwrap()
-        .query_map(
-            params![&verifying_key_string, name_string.as_bytes()],
-            |row| {
-                let signed_event_serialized: Vec<u8> = row.get(0)?;
-                let signed_event: Signed<Event> =
-                    bincode::deserialize(&signed_event_serialized).unwrap();
-                Ok(signed_event)
-            },
-        )
-        .unwrap()
-        .filter_map(Result::ok)
-        .collect::<Vec<_>>();
+        .events_by_key_and_name(verifying_key_string, name_string)
+        .unwrap();
     (StatusCode::OK, Json(RelevantEvents { events }))
 }
 
@@ -169,24 +112,12 @@ async fn get_namespace(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let database_guard = state.database.lock().await;
-    let event_mapping: HashMap<String, Vec<Signed<Event>>> = database_guard
-        .prepare("SELECT verifying_key, signed_event FROM events WHERE name = ?")
-        .unwrap()
-        .query_map([&name_string.as_bytes()], |row| {
-            let verifying_key: String = row.get(0)?;
-            let signed_event_serialized: Vec<u8> = row.get(1)?;
-            let signed_event: Signed<Event> =
-                bincode::deserialize(&signed_event_serialized).unwrap();
-            Ok((verifying_key, signed_event))
-        })
-        .unwrap()
-        .filter_map(Result::ok)
-        .into_group_map();
+    let events = database_guard.events_by_namespace(&name_string).unwrap();
     (
         StatusCode::OK,
         Json(NamespaceResponse {
             namespace: name_string,
-            mapping: event_mapping,
+            events,
         }),
     )
 }
@@ -203,18 +134,13 @@ async fn set_event(
         return (StatusCode::FORBIDDEN, "Forbidden");
     }
 
-    let normalized_verifying_key = encode_verifying_key(&verifying_key);
-    let name = payload.inner.name().as_str().as_bytes();
-    let signed_event_serialized = bincode::serialize(&payload).unwrap();
+    let name = payload.inner.name().clone();
     let priority = payload.inner.priority();
     let expires_at = payload.inner.expires_at();
 
     let database_guard = state.database.lock().await;
     database_guard
-        .execute(
-            "INSERT INTO events (verifying_key, name, signed_event, priority, expires_at) VALUES (?, ?, ?, ?, ?)",
-            params![normalized_verifying_key, name, signed_event_serialized, priority, expires_at],
-        )
+        .insert_event(verifying_key, name, payload, priority, expires_at)
         .unwrap();
 
     (StatusCode::OK, "OK")

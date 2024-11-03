@@ -47,7 +47,6 @@ enum Commands {
     Namespace {
         name: String,
     },
-    List,
     Whoami,
 }
 
@@ -118,14 +117,12 @@ async fn main() -> Result<()> {
         }
         Commands::Namespace { name } => {
             let namespace = Actions::new(config).namespace(&name).await?;
-            for (name, value) in namespace.mapping {
-                println!("{}: {}", name, String::from_utf8_lossy(value.as_bytes()));
-            }
-        }
-        Commands::List => {
-            let verifying_keys = Actions::new(config).list().await?;
-            for verifying_key in verifying_keys {
-                println!("{}", encode_verifying_key(&verifying_key));
+            for (verifying_key, value) in namespace.mapping {
+                println!(
+                    "{}: {}",
+                    encode_verifying_key(&verifying_key),
+                    String::from_utf8_lossy(value.as_bytes())
+                );
             }
         }
         Commands::Whoami => println!("{}", Actions::new(config).whoami().await),

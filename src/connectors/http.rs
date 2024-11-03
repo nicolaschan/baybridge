@@ -1,11 +1,6 @@
-use std::collections::HashMap;
-
 use crate::{
     client::{Event, RelevantEvents},
-    crypto::{
-        encode::{decode_verifying_key, encode_verifying_key},
-        Signed,
-    },
+    crypto::{encode::encode_verifying_key, Signed},
     models::Name,
 };
 use anyhow::Result;
@@ -14,24 +9,14 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 #[derive(Deserialize, Serialize)]
-pub struct KeyspaceResponse {
-    pub verifying_keys: Vec<String>,
-}
-
-#[derive(Deserialize, Serialize)]
 pub struct NamespaceResponse {
     pub namespace: String,
-    pub mapping: HashMap<String, Vec<Signed<Event>>>,
+    pub events: Vec<Signed<Event>>,
 }
 
 impl NamespaceResponse {
-    pub fn merge(&mut self, other: NamespaceResponse) {
-        for (key, events) in other.mapping {
-            self.mapping
-                .entry(key)
-                .and_modify(|existing| existing.extend(events.clone()))
-                .or_insert(events);
-        }
+    pub fn merge(&mut self, mut other: NamespaceResponse) {
+        self.events.append(&mut other.events)
     }
 
     pub fn merge_vec(namespace_responses: Vec<NamespaceResponse>) -> Option<NamespaceResponse> {
@@ -87,17 +72,5 @@ impl HttpConnection {
         debug!("Sending request to {}", path);
         let response: NamespaceResponse = self.client.get(&path).send().await?.json().await?;
         Ok(response)
-    }
-
-    pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
-        let path = format!("{}/keyspace/", self.url);
-        debug!("Sending request to {}", path);
-        let response: KeyspaceResponse = self.client.get(&path).send().await?.json().await?;
-        let verifying_keys = response
-            .verifying_keys
-            .iter()
-            .filter_map(|vk| decode_verifying_key(vk).ok())
-            .collect();
-        Ok(verifying_keys)
     }
 }
