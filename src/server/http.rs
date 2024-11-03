@@ -25,6 +25,7 @@ use crate::{
         Signed,
     },
     models::{self, Peers},
+    server::gc_expired,
 };
 
 #[derive(Clone)]
@@ -59,7 +60,7 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 
     tokio::spawn(async move {
         loop {
-            cleanup_expired(&database_clone).await.unwrap();
+            gc_expired::run(&database_clone).await.unwrap();
             sleep(Duration::from_secs(10)).await;
         }
     });
@@ -217,21 +218,4 @@ async fn set_event(
         .unwrap();
 
     (StatusCode::OK, "OK")
-}
-
-async fn cleanup_expired(database: &Arc<Mutex<Connection>>) -> Result<()> {
-    let now = SystemTime::now();
-    let since_epoch = now
-        .duration_since(UNIX_EPOCH)
-        .expect("Error finding current epoch for expiry cleanup");
-    let unix_timestamp = since_epoch.as_secs().to_string();
-
-    let database_guard = database.lock().await;
-    database_guard
-        .execute(
-            "DELETE FROM events WHERE expires_at <= ?",
-            (unix_timestamp,),
-        )
-        .unwrap();
-    Ok(())
 }
