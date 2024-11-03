@@ -15,7 +15,7 @@ use tracing::info;
 use crate::{
     client::{Event, RelevantEvents},
     configuration::Configuration,
-    connectors::http::{KeyspaceResponse, NamespaceResponse},
+    connectors::http::NamespaceResponse,
     crypto::{encode::decode_verifying_key, Signed},
     models::{self, Peers},
     server::{sqlite_controller::SqliteController, tasks::gc_expired},
@@ -50,7 +50,6 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
         .route("/", get(root))
         .route("/state", get(current_state))
         .route("/peers", get(get_peers))
-        .route("/keyspace/", get(list_keyspace))
         .route("/keyspace/:verifying_key", post(set_event))
         .route("/keyspace/:verifying_key/:address_key", get(get_name))
         .route("/namespace/:address_key", get(get_namespace))
@@ -72,7 +71,7 @@ async fn root(State(state): State<AppState>) -> impl IntoResponse {
     (
         StatusCode::OK,
         format!(
-            "A bay bridge server (git:{}) 🌉 with {} keys, state: {}",
+            "A bay bridge server (git:{}) 🌉 with {} events, state: {}",
             version, key_count, current_state
         ),
     )
@@ -97,12 +96,6 @@ async fn get_peers(State(state): State<AppState>) -> impl IntoResponse {
     Json(peers)
 }
 
-async fn list_keyspace(State(state): State<AppState>) -> impl IntoResponse {
-    let database_guard = state.database.lock().await;
-    let verifying_keys = database_guard.verifying_keys().unwrap();
-    (StatusCode::OK, Json(KeyspaceResponse { verifying_keys }))
-}
-
 async fn get_name(
     Path((verifying_key_string, name_string)): Path<(String, String)>,
     State(state): State<AppState>,
@@ -119,12 +112,12 @@ async fn get_namespace(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     let database_guard = state.database.lock().await;
-    let event_mapping = database_guard.events_by_namespace(&name_string).unwrap();
+    let events = database_guard.events_by_namespace(&name_string).unwrap();
     (
         StatusCode::OK,
         Json(NamespaceResponse {
             namespace: name_string,
-            mapping: event_mapping,
+            events,
         }),
     )
 }

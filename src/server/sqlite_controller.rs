@@ -1,7 +1,6 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use ed25519_dalek::VerifyingKey;
-use itertools::Itertools;
 use rusqlite::params;
 
 use crate::{
@@ -59,17 +58,6 @@ impl SqliteController {
         Ok(signed_events)
     }
 
-    pub fn verifying_keys(&self) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT DISTINCT verifying_key FROM events")?;
-        let verifying_keys = stmt
-            .query_map([], |row| row.get(0))?
-            .filter_map(Result::ok)
-            .collect();
-        Ok(verifying_keys)
-    }
-
     pub fn events_by_key_and_name(
         &self,
         verifying_key: String,
@@ -90,23 +78,19 @@ impl SqliteController {
         Ok(events)
     }
 
-    pub fn events_by_namespace(
-        &self,
-        name: &str,
-    ) -> anyhow::Result<HashMap<String, Vec<Signed<Event>>>> {
+    pub fn events_by_namespace(&self, name: &str) -> anyhow::Result<Vec<Signed<Event>>> {
         let mut stmt = self
             .connection
-            .prepare("SELECT verifying_key, signed_event FROM events WHERE name = ?")?;
+            .prepare("SELECT signed_event FROM events WHERE name = ?")?;
         let events = stmt
             .query_map([name.as_bytes()], |row| {
-                let verifying_key: String = row.get(0)?;
-                let signed_event_serialized: Vec<u8> = row.get(1)?;
+                let signed_event_serialized: Vec<u8> = row.get(0)?;
                 let signed_event: Signed<Event> =
                     bincode::deserialize(&signed_event_serialized).unwrap();
-                Ok((verifying_key, signed_event))
+                Ok(signed_event)
             })?
             .filter_map(Result::ok)
-            .into_group_map();
+            .collect();
         Ok(events)
     }
 
