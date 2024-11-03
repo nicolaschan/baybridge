@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use axum::{
     extract::{Path, State},
@@ -8,22 +6,22 @@ use axum::{
     routing::post,
     Json,
 };
-use tokio::sync::{Mutex, MutexGuard};
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
 use crate::{
+    api::SyncEvents,
     client::{Event, RelevantEvents},
     configuration::Configuration,
     connectors::http::NamespaceResponse,
     crypto::{encode::decode_verifying_key, Signed},
-    models::{self, Peers},
-    server::{sqlite_controller::SqliteController, tasks::gc_expired},
+    models::Peers,
+    server::{sqlite_controller::SqliteController, task_controller::TaskController},
 };
 
 #[derive(Clone)]
 pub struct AppState {
-    database: Arc<Mutex<SqliteController>>,
+    controller: SqliteController,
     peers: Vec<String>,
 }
 
@@ -33,26 +31,26 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 
     let database_path = config.server_database_path();
     info!("Using database at {}", database_path.display());
-    let database = SqliteController::new(&database_path)?;
+    let controller = SqliteController::new(&database_path)?;
 
-    let database = Arc::new(Mutex::new(database));
-    let database_clone = database.clone();
-    let state = AppState { database, peers };
+    let task_controller = TaskController::new(controller.clone());
+    let state = AppState { controller, peers };
 
     tokio::spawn(async move {
         loop {
-            gc_expired::run(&database_clone).await.unwrap();
+            task_controller.run_tasks().await.unwrap();
             sleep(Duration::from_secs(10)).await;
         }
     });
 
     let app = Router::new()
         .route("/", get(root))
-        .route("/state", get(current_state))
-        .route("/peers", get(get_peers))
         .route("/keyspace/:verifying_key", post(set_event))
         .route("/keyspace/:verifying_key/:address_key", get(get_name))
         .route("/namespace/:address_key", get(get_namespace))
+        .route("/sync/peers", get(sync_peers))
+        .route("/sync/state", get(sync_state))
+        .route("/sync/events", get(sync_events))
         .with_state(state);
 
     let bind_address = "0.0.0.0:3000";
@@ -64,9 +62,8 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 
 async fn root(State(state): State<AppState>) -> impl IntoResponse {
     let version = crate::built_info::GIT_VERSION.unwrap_or("unknown");
-    let database_guard = state.database.lock().await;
-    let current_state = current_state_hash(&database_guard);
-    let key_count: usize = database_guard.event_count().unwrap();
+    let current_state = state.controller.current_state_hash().await.unwrap();
+    let key_count: usize = state.controller.event_count().await.unwrap();
     (
         StatusCode::OK,
         format!(
@@ -76,32 +73,31 @@ async fn root(State(state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-async fn current_state(State(state): State<AppState>) -> impl IntoResponse {
-    let database_guard = state.database.lock().await;
-    let hash = current_state_hash(&database_guard);
-    Json(models::Hash(hash))
+async fn sync_state(State(state): State<AppState>) -> impl IntoResponse {
+    let hash = state.controller.current_state_hash().await.unwrap();
+    Json(hash)
 }
 
-fn current_state_hash(database_guard: &MutexGuard<'_, SqliteController>) -> blake3::Hash {
-    let all_signed_events = database_guard.signed_events().unwrap();
-    let serialized_events = bincode::serialize(&all_signed_events).unwrap();
-    blake3::hash(&serialized_events)
-}
-
-async fn get_peers(State(state): State<AppState>) -> impl IntoResponse {
+async fn sync_peers(State(state): State<AppState>) -> impl IntoResponse {
     let peers = Peers {
         peers: state.peers.clone(),
     };
     Json(peers)
 }
 
+async fn sync_events(State(state): State<AppState>) -> impl IntoResponse {
+    let events = state.controller.signed_events().await.unwrap();
+    Json(SyncEvents { events })
+}
+
 async fn get_name(
     Path((verifying_key_string, name_string)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let database_guard = state.database.lock().await;
-    let events = database_guard
+    let events = state
+        .controller
         .events_by_key_and_name(verifying_key_string, name_string)
+        .await
         .unwrap();
     (StatusCode::OK, Json(RelevantEvents { events }))
 }
@@ -110,8 +106,11 @@ async fn get_namespace(
     Path(name_string): Path<String>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let database_guard = state.database.lock().await;
-    let events = database_guard.events_by_namespace(&name_string).unwrap();
+    let events = state
+        .controller
+        .events_by_namespace(&name_string)
+        .await
+        .unwrap();
     (
         StatusCode::OK,
         Json(NamespaceResponse {
@@ -137,9 +136,10 @@ async fn set_event(
     let priority = payload.inner.priority();
     let expires_at = payload.inner.expires_at();
 
-    let database_guard = state.database.lock().await;
-    database_guard
+    state
+        .controller
         .insert_event(verifying_key, name, payload, priority, expires_at)
+        .await
         .unwrap();
 
     (StatusCode::OK, "OK")

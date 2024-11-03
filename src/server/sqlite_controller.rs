@@ -1,16 +1,18 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use ed25519_dalek::VerifyingKey;
 use rusqlite::params;
+use tokio::sync::Mutex;
 
 use crate::{
     client::Event,
     crypto::{encode::encode_verifying_key, Signed},
-    models::Name,
+    models::{self, Name},
 };
 
+#[derive(Clone)]
 pub struct SqliteController {
-    connection: rusqlite::Connection,
+    connection: Arc<Mutex<rusqlite::Connection>>,
 }
 
 impl SqliteController {
@@ -27,25 +29,29 @@ impl SqliteController {
                 )",
             (),
         )?;
+        let connection = Arc::new(Mutex::new(connection));
         Ok(Self { connection })
     }
 
-    pub fn delete_expired_events(&self, unix_timestamp: u64) -> anyhow::Result<usize> {
-        let num_deleted = self.connection.execute(
+    pub async fn delete_expired_events(&self, unix_timestamp: u64) -> anyhow::Result<usize> {
+        let database_guard = self.connection.lock().await;
+        let num_deleted = database_guard.execute(
             "DELETE FROM events WHERE expires_at <= ?",
             (unix_timestamp,),
         )?;
         Ok(num_deleted)
     }
 
-    pub fn event_count(&self) -> anyhow::Result<usize> {
-        let mut stmt = self.connection.prepare("SELECT COUNT(*) FROM events")?;
+    pub async fn event_count(&self) -> anyhow::Result<usize> {
+        let database_guard = self.connection.lock().await;
+        let mut stmt = database_guard.prepare("SELECT COUNT(*) FROM events")?;
         let count = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
     }
 
-    pub fn signed_events(&self) -> anyhow::Result<Vec<Signed<Event>>> {
-        let mut stmt = self.connection.prepare("SELECT signed_event FROM events")?;
+    pub async fn signed_events(&self) -> anyhow::Result<Vec<Signed<Event>>> {
+        let database_guard = self.connection.lock().await;
+        let mut stmt = database_guard.prepare("SELECT signed_event FROM events")?;
         let signed_events = stmt
             .query_map([], |row| {
                 let signed_event_serialized: Vec<u8> = row.get(0)?;
@@ -58,13 +64,20 @@ impl SqliteController {
         Ok(signed_events)
     }
 
-    pub fn events_by_key_and_name(
+    pub async fn current_state_hash(&self) -> anyhow::Result<models::Hash> {
+        let all_signed_events = self.signed_events().await?;
+        let serialized_events = bincode::serialize(&all_signed_events)?;
+        let blake3_hash = blake3::hash(&serialized_events);
+        Ok(models::Hash(blake3_hash))
+    }
+
+    pub async fn events_by_key_and_name(
         &self,
         verifying_key: String,
         name: String,
     ) -> anyhow::Result<Vec<Signed<Event>>> {
-        let mut stmt = self
-            .connection
+        let database_guard = self.connection.lock().await;
+        let mut stmt = database_guard
             .prepare("SELECT signed_event FROM events WHERE verifying_key = ? AND name = ?")?;
         let events = stmt
             .query_map([verifying_key.as_bytes(), name.as_bytes()], |row| {
@@ -78,10 +91,9 @@ impl SqliteController {
         Ok(events)
     }
 
-    pub fn events_by_namespace(&self, name: &str) -> anyhow::Result<Vec<Signed<Event>>> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT signed_event FROM events WHERE name = ?")?;
+    pub async fn events_by_namespace(&self, name: &str) -> anyhow::Result<Vec<Signed<Event>>> {
+        let database_guard = self.connection.lock().await;
+        let mut stmt = database_guard.prepare("SELECT signed_event FROM events WHERE name = ?")?;
         let events = stmt
             .query_map([name.as_bytes()], |row| {
                 let signed_event_serialized: Vec<u8> = row.get(0)?;
@@ -94,7 +106,7 @@ impl SqliteController {
         Ok(events)
     }
 
-    pub fn insert_event(
+    pub async fn insert_event(
         &self,
         verifying_key: VerifyingKey,
         name: Name,
@@ -104,7 +116,8 @@ impl SqliteController {
     ) -> anyhow::Result<usize> {
         let normalized_verifying_key = encode_verifying_key(&verifying_key);
         let signed_event_serialized = bincode::serialize(&signed_event)?;
-        let num_inserted = self.connection.execute(
+        let database_guard = self.connection.lock().await;
+        let num_inserted = database_guard.execute(
             "INSERT INTO events (verifying_key, name, signed_event, priority, expires_at) VALUES (?, ?, ?, ?, ?)",
             params![
                 normalized_verifying_key.as_bytes(),
