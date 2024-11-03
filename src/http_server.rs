@@ -16,7 +16,7 @@ use baybridge::{
         encode::{decode_verifying_key, encode_verifying_key},
         Signed,
     },
-    models::Peers,
+    models::{self, Peers},
 };
 use itertools::Itertools;
 use rusqlite::{params, Connection};
@@ -65,6 +65,7 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 
     let app = Router::new()
         .route("/", get(root))
+        .route("/state", get(current_state))
         .route("/peers", get(get_peers))
         .route("/keyspace/", get(list_keyspace))
         .route("/keyspace/:verifying_key", post(set_event))
@@ -93,6 +94,12 @@ async fn root(State(state): State<AppState>) -> impl IntoResponse {
             version, key_count, current_state
         ),
     )
+}
+
+async fn current_state(State(state): State<AppState>) -> impl IntoResponse {
+    let database_guard = state.database.lock().await;
+    let hash = current_state_hash(&database_guard);
+    Json(models::Hash(hash))
 }
 
 fn current_state_hash(database_guard: &MutexGuard<'_, Connection>) -> blake3::Hash {
