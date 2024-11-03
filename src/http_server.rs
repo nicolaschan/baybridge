@@ -20,7 +20,7 @@ use baybridge::{
 };
 use itertools::Itertools;
 use rusqlite::{params, Connection};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
@@ -82,16 +82,34 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 async fn root(State(state): State<AppState>) -> impl IntoResponse {
     let version = baybridge::built_info::GIT_VERSION.unwrap_or("unknown");
     let database_guard = state.database.lock().await;
+    let current_state = current_state_hash(&database_guard);
     let key_count: usize = database_guard
         .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
         .unwrap();
     (
         StatusCode::OK,
         format!(
-            "A bay bridge server (git:{}) 🌉 with {} keys",
-            version, key_count
+            "A bay bridge server (git:{}) 🌉 with {} keys, state: {}",
+            version, key_count, current_state
         ),
     )
+}
+
+fn current_state_hash(database_guard: &MutexGuard<'_, Connection>) -> blake3::Hash {
+    let all_events = database_guard
+        .prepare("SELECT signed_event FROM events ORDER BY signed_event ASC")
+        .unwrap()
+        .query_map([], |row| {
+            let signed_event_serialized: Vec<u8> = row.get(0)?;
+            let signed_event: Signed<Event> =
+                bincode::deserialize(&signed_event_serialized).unwrap();
+            Ok(signed_event)
+        })
+        .unwrap()
+        .filter_map(Result::ok)
+        .collect::<Vec<Signed<Event>>>();
+    let serialized_events = bincode::serialize(&all_events).unwrap();
+    blake3::hash(&serialized_events)
 }
 
 async fn get_peers(State(state): State<AppState>) -> impl IntoResponse {
