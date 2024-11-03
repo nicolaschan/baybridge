@@ -7,11 +7,9 @@ use baybridge::{
     connectors::{connection::Connection, http::HttpConnection},
     crypto::encode::encode_verifying_key,
     models::{Name, Value},
+    server::http::start_http_server,
 };
 use clap::{command, Parser, Subcommand};
-use http_server::start_http_server;
-
-mod http_server;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

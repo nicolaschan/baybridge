@@ -8,7 +8,15 @@ use axum::{
     routing::post,
     Json,
 };
-use baybridge::{
+use itertools::Itertools;
+use rusqlite::{params, Connection};
+use tokio::sync::{Mutex, MutexGuard};
+use tokio::time::{sleep, Duration};
+use tracing::info;
+
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::{
     client::{Event, RelevantEvents},
     configuration::Configuration,
     connectors::http::{KeyspaceResponse, NamespaceResponse},
@@ -18,13 +26,6 @@ use baybridge::{
     },
     models::{self, Peers},
 };
-use itertools::Itertools;
-use rusqlite::{params, Connection};
-use tokio::sync::{Mutex, MutexGuard};
-use tokio::time::{sleep, Duration};
-use tracing::info;
-
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -81,7 +82,8 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 }
 
 async fn root(State(state): State<AppState>) -> impl IntoResponse {
-    let version = baybridge::built_info::GIT_VERSION.unwrap_or("unknown");
+    // let version = crate::built_info::GIT_VERSION.unwrap_or("unknown");
+    let version = "unknown";
     let database_guard = state.database.lock().await;
     let current_state = current_state_hash(&database_guard);
     let key_count: usize = database_guard
