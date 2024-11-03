@@ -21,6 +21,7 @@ bon = "2.3.0"
 clap = { version = "4.5.16", features = ["derive"] }
 dirs = "5.0.1"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "signature"] }
+failsafe = "1.3.0"
 futures = "0.3.31"
 itertools = "0.13.0"
 rand = "0.8.5"

@@ -5,6 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
+use failsafe::futures::CircuitBreaker;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
@@ -32,6 +33,13 @@ impl NamespaceResponse {
 pub struct HttpConnection {
     url: String,
     client: reqwest::Client,
+    circuit_breaker: failsafe::StateMachine<
+        failsafe::failure_policy::OrElse<
+            failsafe::failure_policy::SuccessRateOverTimeWindow<failsafe::backoff::EqualJittered>,
+            failsafe::failure_policy::ConsecutiveFailures<failsafe::backoff::EqualJittered>,
+        >,
+        (),
+    >,
 }
 
 impl HttpConnection {
@@ -40,9 +48,11 @@ impl HttpConnection {
             .timeout(std::time::Duration::from_secs(5))
             .build()
             .unwrap();
+        let circuit_breaker = failsafe::Config::new().build();
         HttpConnection {
             url: url.to_string(),
             client,
+            circuit_breaker,
         }
     }
 
@@ -50,7 +60,8 @@ impl HttpConnection {
         let verifying_key_string = encode_verifying_key(&payload.verifying_key);
         let path = format!("{}/keyspace/{}", self.url, verifying_key_string);
         debug!("Setting {} on {}", payload.inner.name(), path);
-        self.client.post(&path).json(&payload).send().await?;
+        let request_future = self.client.post(&path).json(&payload).send();
+        self.circuit_breaker.call(request_future).await?;
         Ok(())
     }
 
@@ -58,19 +69,16 @@ impl HttpConnection {
         let verifying_key_string = encode_verifying_key(verifying_key);
         let path = format!("{}/keyspace/{}/{}", self.url, verifying_key_string, name);
         debug!("Sending request to {}", path);
-        self.client
-            .get(&path)
-            .send()
-            .await?
-            .json::<RelevantEvents>()
-            .await
-            .map_err(Into::into)
+        let request_future = self.client.get(&path).send();
+        let response = self.circuit_breaker.call(request_future).await?;
+        response.json::<RelevantEvents>().await.map_err(Into::into)
     }
 
     pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
         let path = format!("{}/namespace/{}", self.url, name);
         debug!("Sending request to {}", path);
-        let response: NamespaceResponse = self.client.get(&path).send().await?.json().await?;
-        Ok(response)
+        let request_future = self.client.get(&path).send();
+        let response = self.circuit_breaker.call(request_future).await?;
+        response.json().await.map_err(Into::into)
     }
 }
