@@ -4,10 +4,7 @@ use crate::{
     configuration::Configuration,
     connectors::http::NamespaceResponse,
     crdt::merge_events,
-    crypto::{
-        encode::{decode_verifying_key, encode_verifying_key},
-        CryptoKey, Signed,
-    },
+    crypto::{encode::decode_verifying_key, CryptoKey, Signed},
     models::{Name, NamespaceValues, Value},
 };
 use anyhow::Result;
@@ -133,9 +130,8 @@ impl Actions {
         })
     }
 
-    pub async fn whoami(&self) -> String {
+    pub async fn whoami(&self) -> VerifyingKey {
         let crypto_key = CryptoKey::from_config(&self.config).await;
-        let verifying_key = crypto_key.verifying();
-        encode_verifying_key(&verifying_key)
+        crypto_key.verifying()
     }
 }

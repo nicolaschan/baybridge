@@ -125,7 +125,11 @@ async fn main() -> Result<()> {
                 );
             }
         }
-        Commands::Whoami => println!("{}", Actions::new(config).whoami().await),
+        Commands::Whoami => {
+            let verifying_key = Actions::new(config).whoami().await;
+            let encoded_verifying_key = encode_verifying_key(&verifying_key);
+            println!("{}", encoded_verifying_key);
+        }
     }
     Ok(())
 }
