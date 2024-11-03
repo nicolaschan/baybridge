@@ -63,8 +63,7 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
 }
 
 async fn root(State(state): State<AppState>) -> impl IntoResponse {
-    // let version = crate::built_info::GIT_VERSION.unwrap_or("unknown");
-    let version = "unknown";
+    let version = crate::built_info::GIT_VERSION.unwrap_or("unknown");
     let database_guard = state.database.lock().await;
     let current_state = current_state_hash(&database_guard);
     let key_count: usize = database_guard.event_count().unwrap();
