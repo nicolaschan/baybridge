@@ -17,7 +17,7 @@ pub struct Signed<T: Signable> {
 #[derive(Serialize, Deserialize)]
 pub struct SerializableSigned<T> {
     pub inner: T,
-    #[serde_as(as = "Base64")]
+    #[serde_as(as = "Base64<serde_with::base64::UrlSafe>")]
     pub verifying_key: Vec<u8>,
     #[serde_as(as = "Base64")]
     pub signature: Vec<u8>,

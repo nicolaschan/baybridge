@@ -1,19 +1,17 @@
-use std::time::UNIX_EPOCH;
+use std::{collections::HashMap, time::UNIX_EPOCH};
 
 use crate::{
     configuration::Configuration,
     connectors::http::NamespaceResponse,
     crdt::merge_events,
-    crypto::{
-        encode::{decode_verifying_key, encode_verifying_key},
-        CryptoKey,
-    },
+    crypto::{encode::decode_verifying_key, CryptoKey, Signed},
     models::{Name, NamespaceValues, Value},
 };
 use anyhow::Result;
+use bon::bon;
 use ed25519_dalek::VerifyingKey;
 use futures::future::join_all;
-use bon::bon;
+use itertools::Itertools;
 use std::time::{Duration, SystemTime};
 
 use super::{DeletionEvent, Event, SetEvent};
@@ -34,7 +32,13 @@ impl Actions {
     }
 
     #[builder]
-    pub async fn set(&self, name: Name, value: Value, expiry: Option<Expiry>, priority: Option<u64>) -> Result<()> {
+    pub async fn set(
+        &self,
+        name: Name,
+        value: Value,
+        expiry: Option<Expiry>,
+        priority: Option<u64>,
+    ) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
 
         let now = SystemTime::now();
@@ -45,24 +49,22 @@ impl Actions {
 
         let priority = match priority {
             Some(priority) => priority,
-            None => unix_timestamp
+            None => unix_timestamp,
         };
 
         let expires_at = match expiry {
-            Some(expiry) => {
-                match expiry {
-                    Expiry::ExpiresAt(expires_at) => Some(expires_at),
-                    Expiry::Ttl(ttl) => Some(unix_timestamp + ttl.as_secs()),
-                }
+            Some(expiry) => match expiry {
+                Expiry::ExpiresAt(expires_at) => Some(expires_at),
+                Expiry::Ttl(ttl) => Some(unix_timestamp + ttl.as_secs()),
             },
-            None => None
+            None => None,
         };
 
         let event = Event::Set(SetEvent {
             name,
             value,
             priority,
-            expires_at,       
+            expires_at,
         });
         let signed = crypto_key.sign(event);
 
@@ -128,13 +130,17 @@ impl Actions {
             Some(response) => Ok(response),
             None => Err(anyhow::anyhow!("Namespace not found")),
         })?;
-        let value_mapping = merged_namespace
-            .mapping
+        let event_mapping: HashMap<VerifyingKey, Vec<Signed<Event>>> = merged_namespace
+            .events
+            .into_iter()
+            .map(|event| (event.verifying_key, event))
+            .into_group_map();
+        let value_mapping = event_mapping
             .iter()
             .map(|(k, v)| {
                 let value = merge_events(v.clone());
                 match value {
-                    Some(value) => Ok((k.clone(), value)),
+                    Some(value) => Ok((*k, value)),
                     None => Err(anyhow::anyhow!("Value not found")),
                 }
             })
@@ -146,19 +152,8 @@ impl Actions {
         })
     }
 
-    pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
-        let list_futures = self.config.get_connections().iter().map(|conn| conn.list());
-        Ok(join_all(list_futures)
-            .await
-            .into_iter()
-            .filter_map(Result::ok)
-            .flatten()
-            .collect::<Vec<_>>())
-    }
-
-    pub async fn whoami(&self) -> String {
+    pub async fn whoami(&self) -> VerifyingKey {
         let crypto_key = CryptoKey::from_config(&self.config).await;
-        let verifying_key = crypto_key.verifying();
-        encode_verifying_key(&verifying_key)
+        crypto_key.verifying()
     }
 }

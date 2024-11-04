@@ -1,4 +1,5 @@
 use crate::{
+    api::{StateHash, SyncEvents},
     client::{Event, RelevantEvents},
     crypto::Signed,
     models::Name,
@@ -13,6 +14,12 @@ pub enum Connection {
 }
 
 impl Connection {
+    pub fn url(&self) -> &str {
+        match self {
+            Connection::Http(http) => http.url(),
+        }
+    }
+
     pub async fn set(&self, payload: Signed<Event>) -> Result<()> {
         match self {
             Connection::Http(http) => http.set(payload).await,
@@ -31,9 +38,15 @@ impl Connection {
         }
     }
 
-    pub async fn list(&self) -> Result<Vec<VerifyingKey>> {
+    pub async fn state_hash(&self) -> Result<StateHash> {
         match self {
-            Connection::Http(http) => http.list().await,
+            Connection::Http(http) => http.state_hash().await,
+        }
+    }
+
+    pub async fn sync_events(&self) -> Result<SyncEvents> {
+        match self {
+            Connection::Http(http) => http.sync_events().await,
         }
     }
 }
