@@ -138,7 +138,7 @@ impl SqliteController {
         match insert_result {
             Ok(num_inserted) => Ok(num_inserted),
             Err(e) => {
-                debug!("Error inserting event: {:?}", e);
+                debug!("Ignoring error inserting event: {:?}", e);
                 Ok(0)
             }
         }
@@ -154,7 +154,8 @@ impl SqliteController {
     pub async fn set_peer_last_hash(&self, peer_url: &str, hash: StateHash) -> anyhow::Result<()> {
         let database_guard = self.connection.lock().await;
         database_guard.execute(
-            "INSERT INTO peers (url, last_hash)",
+            "INSERT INTO peers (url, last_hash) VALUES (?, ?)
+             ON CONFLICT(url) DO UPDATE SET last_hash = excluded.last_hash",
             params![peer_url, hash.hash.as_bytes()],
         )?;
         Ok(())
