@@ -13,6 +13,8 @@ use crate::{
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
 use futures::future::join_all;
+use bon::bon;
+use std::time::{Duration, SystemTime};
 
 use super::{DeletionEvent, Event, SetEvent};
 
@@ -20,19 +22,47 @@ pub struct Actions {
     pub config: Configuration,
 }
 
+pub enum Expiry {
+    ExpiresAt(u64),
+    Ttl(Duration),
+}
+
+#[bon]
 impl Actions {
     pub fn new(config: Configuration) -> Actions {
         Actions { config }
     }
 
-    async fn set_internal(&self, name: Name, value: Value, expires_at: Option<u64>) -> Result<()> {
+    #[builder]
+    pub async fn set(&self, name: Name, value: Value, expiry: Option<Expiry>, priority: Option<u64>) -> Result<()> {
         let mut crypto_key = CryptoKey::from_config(&self.config).await;
+
+        let now = SystemTime::now();
+        let since_epoch = now
+            .duration_since(UNIX_EPOCH)
+            .expect("Error finding current epoch for expiry cleanup");
+        let unix_timestamp = since_epoch.as_secs();
+
+        let priority = match priority {
+            Some(priority) => priority,
+            None => unix_timestamp
+        };
+
+        let expires_at = match expiry {
+            Some(expiry) => {
+                match expiry {
+                    Expiry::ExpiresAt(expires_at) => Some(expires_at),
+                    Expiry::Ttl(ttl) => Some(unix_timestamp + ttl.as_secs()),
+                }
+            },
+            None => None
+        };
 
         let event = Event::Set(SetEvent {
             name,
             value,
-            priority: UNIX_EPOCH.elapsed().unwrap().as_millis() as u64,
-            expires_at,
+            priority,
+            expires_at,       
         });
         let signed = crypto_key.sign(event);
 
@@ -42,20 +72,8 @@ impl Actions {
             .iter()
             .map(|connection| connection.set(signed.clone()));
         join_all(set_futures).await;
+
         Ok(())
-    }
-
-    pub async fn set_with_expires_at(
-        &self,
-        name: Name,
-        value: Value,
-        expires_at: u64,
-    ) -> Result<()> {
-        self.set_internal(name, value, Some(expires_at)).await
-    }
-
-    pub async fn set(&self, name: Name, value: Value) -> Result<()> {
-        self.set_internal(name, value, None).await
     }
 
     pub async fn delete(&self, name: Name) -> Result<()> {
