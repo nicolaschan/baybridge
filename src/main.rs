@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use anyhow::Result;
 use baybridge::{
-    client::Actions,
+    client::{Actions, Expiry},
     configuration::Configuration,
     connectors::{connection::Connection, http::HttpConnection},
     crypto::encode::encode_verifying_key,
@@ -32,10 +32,13 @@ enum Commands {
         name: String,
         value: String,
         // Time to live in seconds
-        #[clap(short, long)]
+        #[clap(short, long, group = "expiry")]
         ttl: Option<u64>,
         // Explicit unix timestamp expires at
+        #[clap(short, long, group = "expiry")]
         expires_at: Option<u64>,
+        #[clap(short, long)]
+        priority: Option<u64>,
     },
     Delete {
         name: String,
@@ -79,28 +82,28 @@ async fn main() -> Result<()> {
             value,
             ttl,
             expires_at,
+            priority,
         } => {
             let name = Name::new(name);
             let value = Value::new(value.as_bytes().to_vec());
-            let expires_at = match ttl {
-                Some(ttl) => Some(
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs()
-                        + ttl,
-                ),
-                None => expires_at,
+            let expiry = match ttl {
+                Some(ttl) => Some(Expiry::Ttl(std::time::Duration::from_secs(ttl))),
+                None => None,
             };
 
-            match expires_at {
-                None => Actions::new(config).set(name, value).await?,
-                Some(expires_at) => {
-                    Actions::new(config)
-                        .set_with_expires_at(name, value, expires_at)
-                        .await?
-                }
-            }
+            let expiry = match expires_at {
+                Some(expires_at) => Some(Expiry::ExpiresAt(expires_at)),
+                None => expiry,
+            };
+
+            Actions::new(config)
+                .set()
+                .name(name)
+                .value(value)
+                .maybe_expiry(expiry)
+                .maybe_priority(priority)
+                .call()
+                .await?
         }
         Commands::Delete { name } => {
             let name = Name::new(name);
