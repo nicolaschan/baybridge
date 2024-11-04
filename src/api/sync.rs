@@ -6,3 +6,8 @@ use crate::{client::Event, crypto::Signed};
 pub struct SyncEvents {
     pub events: Vec<Signed<Event>>,
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct StateHash {
+    pub hash: blake3::Hash,
+}

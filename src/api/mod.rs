@@ -1,3 +1,4 @@
-mod sync_events;
+mod sync;
 
-pub use sync_events::SyncEvents;
+pub use sync::StateHash;
+pub use sync::SyncEvents;

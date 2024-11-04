@@ -1,13 +1,14 @@
 use std::{path::PathBuf, sync::Arc};
 
-use ed25519_dalek::VerifyingKey;
+use itertools::Itertools;
 use rusqlite::params;
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::{
+    api::StateHash,
     client::Event,
     crypto::{encode::encode_verifying_key, Signed},
-    models::{self, Name},
 };
 
 #[derive(Clone)]
@@ -20,13 +21,21 @@ impl SqliteController {
         let connection = rusqlite::Connection::open(database_path)?;
         connection.execute(
             "CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    verifying_key BLOB NOT NULL,
-                    name BLOB NOT NULL,
-                    signed_event BLOB NOT NULL UNIQUE,
-                    priority BIGINT NOT NULL,
-                    expires_at INTEGER
-                )",
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                verifying_key BLOB NOT NULL,
+                name BLOB NOT NULL,
+                signed_event BLOB NOT NULL UNIQUE,
+                priority BIGINT NOT NULL,
+                expires_at INTEGER
+            )",
+            (),
+        )?;
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS peers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL UNIQUE,
+                last_hash BLOB
+            )",
             (),
         )?;
         let connection = Arc::new(Mutex::new(connection));
@@ -51,7 +60,8 @@ impl SqliteController {
 
     pub async fn signed_events(&self) -> anyhow::Result<Vec<Signed<Event>>> {
         let database_guard = self.connection.lock().await;
-        let mut stmt = database_guard.prepare("SELECT signed_event FROM events")?;
+        let mut stmt =
+            database_guard.prepare("SELECT signed_event FROM events ORDER BY signed_event")?;
         let signed_events = stmt
             .query_map([], |row| {
                 let signed_event_serialized: Vec<u8> = row.get(0)?;
@@ -64,11 +74,11 @@ impl SqliteController {
         Ok(signed_events)
     }
 
-    pub async fn current_state_hash(&self) -> anyhow::Result<models::Hash> {
+    pub async fn current_state_hash(&self) -> anyhow::Result<StateHash> {
         let all_signed_events = self.signed_events().await?;
         let serialized_events = bincode::serialize(&all_signed_events)?;
-        let blake3_hash = blake3::hash(&serialized_events);
-        Ok(models::Hash(blake3_hash))
+        let hash = blake3::hash(&serialized_events);
+        Ok(StateHash { hash })
     }
 
     pub async fn events_by_key_and_name(
@@ -106,18 +116,16 @@ impl SqliteController {
         Ok(events)
     }
 
-    pub async fn insert_event(
-        &self,
-        verifying_key: VerifyingKey,
-        name: Name,
-        signed_event: Signed<Event>,
-        priority: u64,
-        expires_at: Option<u64>,
-    ) -> anyhow::Result<usize> {
+    pub async fn insert_event(&self, signed_event: Signed<Event>) -> anyhow::Result<usize> {
+        let name = signed_event.inner.name();
+        let priority = signed_event.inner.priority();
+        let verifying_key = signed_event.verifying_key;
+        let expires_at = signed_event.inner.expires_at();
+
         let normalized_verifying_key = encode_verifying_key(&verifying_key);
         let signed_event_serialized = bincode::serialize(&signed_event)?;
         let database_guard = self.connection.lock().await;
-        let num_inserted = database_guard.execute(
+        let insert_result = database_guard.execute(
             "INSERT INTO events (verifying_key, name, signed_event, priority, expires_at) VALUES (?, ?, ?, ?, ?)",
             params![
                 normalized_verifying_key.as_bytes(),
@@ -126,7 +134,46 @@ impl SqliteController {
                 priority,
                 expires_at,
             ],
+        );
+        match insert_result {
+            Ok(num_inserted) => Ok(num_inserted),
+            Err(e) => {
+                debug!("Error inserting event: {:?}", e);
+                Ok(0)
+            }
+        }
+    }
+
+    pub async fn insert_events(&self, events: Vec<Signed<Event>>) -> anyhow::Result<()> {
+        for event in events {
+            self.insert_event(event).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn set_peer_last_hash(&self, peer_url: &str, hash: StateHash) -> anyhow::Result<()> {
+        let database_guard = self.connection.lock().await;
+        database_guard.execute(
+            "INSERT INTO peers (url, last_hash)",
+            params![peer_url, hash.hash.as_bytes()],
         )?;
-        Ok(num_inserted)
+        Ok(())
+    }
+
+    pub async fn get_peer_last_hash(&self, peer_url: &str) -> Option<StateHash> {
+        let database_guard = self.connection.lock().await;
+        let mut stmt = database_guard
+            .prepare("SELECT last_hash FROM peers WHERE url = ?")
+            .unwrap();
+        let hash = stmt
+            .query_map([peer_url], |row| {
+                let hash_bytes: [u8; 32] = row.get(0)?;
+                Ok(blake3::Hash::from_bytes(hash_bytes))
+            })
+            .ok()?
+            .at_most_one()
+            .ok()??
+            .ok()?;
+        Some(StateHash { hash })
     }
 }

@@ -13,7 +13,10 @@ use crate::{
     api::SyncEvents,
     client::{Event, RelevantEvents},
     configuration::Configuration,
-    connectors::http::NamespaceResponse,
+    connectors::{
+        connection::Connection,
+        http::{HttpConnection, NamespaceResponse},
+    },
     crypto::{encode::decode_verifying_key, Signed},
     models::Peers,
     server::{sqlite_controller::SqliteController, task_controller::TaskController},
@@ -32,8 +35,15 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
     let database_path = config.server_database_path();
     info!("Using database at {}", database_path.display());
     let controller = SqliteController::new(&database_path)?;
+    let peer_connections = peers
+        .iter()
+        .map(|peer| Connection::Http(HttpConnection::new(peer)))
+        .collect();
 
-    let task_controller = TaskController::new(controller.clone());
+    let task_controller = TaskController::builder()
+        .controller(controller.clone())
+        .peer_connections(peer_connections)
+        .build();
     let state = AppState { controller, peers };
 
     tokio::spawn(async move {
@@ -67,7 +77,7 @@ async fn root(State(state): State<AppState>) -> impl IntoResponse {
     (
         StatusCode::OK,
         format!(
-            "A bay bridge server (git:{}) 🌉 with {} events, state: {}",
+            "A bay bridge server (git:{}) 🌉 with {} events, state: {:?}",
             version, key_count, current_state
         ),
     )
@@ -123,24 +133,16 @@ async fn get_namespace(
 async fn set_event(
     Path(verifying_key_string): Path<String>,
     State(state): State<AppState>,
-    Json(payload): Json<Signed<Event>>,
+    Json(event): Json<Signed<Event>>,
 ) -> impl IntoResponse {
     let verifying_key = decode_verifying_key(&verifying_key_string).unwrap();
-    let verified = payload.verify(&verifying_key);
+    let verified = event.verify(&verifying_key);
     if !verified {
         // Return 403 Forbidden
         return (StatusCode::FORBIDDEN, "Forbidden");
     }
 
-    let name = payload.inner.name().clone();
-    let priority = payload.inner.priority();
-    let expires_at = payload.inner.expires_at();
-
-    state
-        .controller
-        .insert_event(verifying_key, name, payload, priority, expires_at)
-        .await
-        .unwrap();
+    state.controller.insert_event(event).await.unwrap();
 
     (StatusCode::OK, "OK")
 }

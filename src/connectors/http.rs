@@ -1,4 +1,5 @@
 use crate::{
+    api::{StateHash, SyncEvents},
     client::{Event, RelevantEvents},
     crypto::{encode::encode_verifying_key, Signed},
     models::Name,
@@ -56,6 +57,10 @@ impl HttpConnection {
         }
     }
 
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
     pub async fn set(&self, payload: Signed<Event>) -> Result<()> {
         let verifying_key_string = encode_verifying_key(&payload.verifying_key);
         let path = format!("{}/keyspace/{}", self.url, verifying_key_string);
@@ -76,6 +81,22 @@ impl HttpConnection {
 
     pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
         let path = format!("{}/namespace/{}", self.url, name);
+        debug!("Sending request to {}", path);
+        let request_future = self.client.get(&path).send();
+        let response = self.circuit_breaker.call(request_future).await?;
+        response.json().await.map_err(Into::into)
+    }
+
+    pub async fn state_hash(&self) -> Result<StateHash> {
+        let path = format!("{}/sync/state", self.url);
+        debug!("Sending request to {}", path);
+        let request_future = self.client.get(&path).send();
+        let response = self.circuit_breaker.call(request_future).await?;
+        response.json().await.map_err(Into::into)
+    }
+
+    pub async fn sync_events(&self) -> Result<SyncEvents> {
+        let path = format!("{}/sync/events", self.url);
         debug!("Sending request to {}", path);
         let request_future = self.client.get(&path).send();
         let response = self.circuit_breaker.call(request_future).await?;
