@@ -86,11 +86,7 @@ async fn main() -> Result<()> {
         } => {
             let name = Name::new(name);
             let value = Value::new(value.as_bytes().to_vec());
-            let expiry = match ttl {
-                Some(ttl) => Some(Expiry::Ttl(std::time::Duration::from_secs(ttl))),
-                None => None,
-            };
-
+            let expiry = ttl.map(|ttl| Expiry::Ttl(std::time::Duration::from_secs(ttl)));
             let expiry = match expires_at {
                 Some(expires_at) => Some(Expiry::ExpiresAt(expires_at)),
                 None => expiry,
