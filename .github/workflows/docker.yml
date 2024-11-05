@@ -21,8 +21,9 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    - uses: extractions/setup-just@v2
     - name: Build css
-      run: just build
+      run: just build-css
     - name: Build & push docker image
       run: |
         docker build . --push --file Dockerfile \
