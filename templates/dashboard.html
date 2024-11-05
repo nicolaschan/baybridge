@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bay Bridge</title>
+    <link href="dist/output.css" rel="stylesheet">
+    <style>
+        body { display: flex; flex-direction: column; min-height: 100vh; }
+        main { flex: 1; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <header class="bg-sky-900 text-white p-4">
+        <h1 class="text-3xl font-bold">Bay Bridge 🌉</h1>
+    </header>
+    <main class="p-4">
+        <h2 class="text-2xl font-bold">Statistics</h2>
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mt-4">
+            <a href="/sync/events">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-xl font-bold text-center">{{ event_count }}</h3>
+                    <p class="text-gray-600 text-center">events</p>
+                </div>
+            </a>
+            <a href="/sync/state">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-xl font-bold text-center">{{ state_hash }}</h3>
+                    <p class="text-gray-600 text-center">current state</p>
+                </div>
+            </a>
+            <a href="/sync/peers">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-xl font-bold text-center">{{ peer_count }}</h3>
+                    <p class="text-gray-600 text-center">peers</p>
+                </div>
+            </a>
+        </div>
+    </main>
+    <footer class="text-white p-4">
+        <p class="text-gray-600 text-sm">
+            Version:
+            <a class="hover:underline" href="https://github.com/nicolaschan/baybridge/commit/{{ version }}">
+                {{ version }}
+            </a>
+        </p>
+    </footer>
+</body>
+</html>

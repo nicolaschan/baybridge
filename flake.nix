@@ -26,6 +26,8 @@
           buildInputs = [
             rustVersion
             pkgs.cargo-watch
+            pkgs.just
+            pkgs.nodejs
             pkgs.rust-analyzer
             pkgs.pkg-config
             pkgs.openssl

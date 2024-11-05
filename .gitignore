@@ -4,3 +4,7 @@
 # nix
 .direnv
 /result
+
+# node
+node_modules
+/dist

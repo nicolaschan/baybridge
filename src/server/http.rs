@@ -7,6 +7,7 @@ use axum::{
     Json,
 };
 use tokio::time::{sleep, Duration};
+use tower_http::services::ServeDir;
 use tracing::info;
 
 use crate::{
@@ -21,6 +22,8 @@ use crate::{
     models::Peers,
     server::{sqlite_controller::SqliteController, task_controller::TaskController},
 };
+
+use super::templates;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -54,13 +57,15 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
     });
 
     let app = Router::new()
-        .route("/", get(root))
+        .route("/", get(dashboard))
+        .route("/info", get(info))
         .route("/keyspace/:verifying_key", post(set_event))
         .route("/keyspace/:verifying_key/:address_key", get(get_name))
         .route("/namespace/:address_key", get(get_namespace))
         .route("/sync/peers", get(sync_peers))
         .route("/sync/state", get(sync_state))
         .route("/sync/events", get(sync_events))
+        .nest_service("/dist", ServeDir::new("dist"))
         .with_state(state);
 
     let bind_address = "0.0.0.0:3000";
@@ -70,7 +75,31 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
     Ok(())
 }
 
-async fn root(State(state): State<AppState>) -> impl IntoResponse {
+async fn dashboard(State(state): State<AppState>) -> impl IntoResponse {
+    let version = crate::built_info::GIT_VERSION
+        .unwrap_or("unknown")
+        .to_string();
+    let state_hash = state
+        .controller
+        .current_state_hash()
+        .await
+        .unwrap()
+        .hash
+        .to_string()
+        .chars()
+        .take(12)
+        .collect();
+    let event_count = state.controller.event_count().await.unwrap();
+    let peer_count = state.peers.len();
+    templates::Dashboard {
+        state_hash,
+        version,
+        event_count,
+        peer_count,
+    }
+}
+
+async fn info(State(state): State<AppState>) -> impl IntoResponse {
     let version = crate::built_info::GIT_VERSION.unwrap_or("unknown");
     let current_state = state.controller.current_state_hash().await.unwrap();
     let key_count: usize = state.controller.event_count().await.unwrap();
