@@ -164,6 +164,7 @@ async fn set_event(
     State(state): State<AppState>,
     Json(event): Json<Signed<Event>>,
 ) -> impl IntoResponse {
+    let name = event.inner.name().as_str();
     let verifying_key = decode_verifying_key(&verifying_key_string).unwrap();
     let verified = event.verify(&verifying_key);
     if !verified {
@@ -171,7 +172,8 @@ async fn set_event(
         return (StatusCode::FORBIDDEN, "Forbidden");
     }
 
-    state.controller.insert_event(event).await.unwrap();
+    state.controller.insert_event(event.clone()).await.unwrap();
+    state.controller.delete_old_events(verifying_key, name).await.unwrap();
 
     (StatusCode::OK, "OK")
 }

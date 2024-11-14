@@ -4,6 +4,7 @@ use itertools::Itertools;
 use rusqlite::params;
 use tokio::sync::Mutex;
 use tracing::debug;
+use ed25519_dalek::VerifyingKey;
 
 use crate::{
     api::StateHash,
@@ -47,6 +48,20 @@ impl SqliteController {
         let num_deleted = database_guard.execute(
             "DELETE FROM events WHERE expires_at <= ?",
             (unix_timestamp,),
+        )?;
+        Ok(num_deleted)
+    }
+
+    pub async fn delete_old_events(&self, verifying_key: VerifyingKey, name: &str) -> anyhow::Result<usize> {
+        let normalized_verifying_key = encode_verifying_key(&verifying_key);
+        let database_guard = self.connection.lock().await;
+
+        let num_deleted = database_guard.execute(
+            "DELETE FROM events WHERE verifying_key = ? AND name = ? AND expires_at IS NOT NULL
+             ORDER BY priority DESC, id DESC
+             OFFSET 1",
+            (normalized_verifying_key.as_bytes(),
+             name),
         )?;
         Ok(num_deleted)
     }
