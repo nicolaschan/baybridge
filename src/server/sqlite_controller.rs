@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use itertools::Itertools;
 use rusqlite::params;
 use tokio::sync::Mutex;
-use tracing::debug;
+use tracing::{debug, info};
 use ed25519_dalek::VerifyingKey;
 
 use crate::{
@@ -57,12 +57,18 @@ impl SqliteController {
         let database_guard = self.connection.lock().await;
 
         let num_deleted = database_guard.execute(
-            "DELETE FROM events WHERE verifying_key = ? AND name = ? AND expires_at IS NOT NULL
-             ORDER BY priority DESC, id DESC
-             OFFSET 1",
-            (normalized_verifying_key.as_bytes(),
-             name),
+            "WITH prev_events AS (
+                 SELECT
+                     id,
+                     RANK() OVER (PARTITION BY verifying_key, name ORDER BY priority DESC, id DESC) AS rank
+                 FROM events
+                 WHERE verifying_key = ? AND name = ? AND expires_at IS NOT NULL
+             )
+             DELETE FROM events 
+             WHERE id IN (SELECT id FROM prev_events WHERE rank > 1)",
+            params![normalized_verifying_key.as_bytes(), name],
         )?;
+        info!("{}, {}, {}", num_deleted, normalized_verifying_key, name);
         Ok(num_deleted)
     }
 
