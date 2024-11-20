@@ -38,7 +38,7 @@
           '';
         };
 
-        packages.default = pkgs.rustPlatform.buildRustPackage rec {
+        packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "baybridge";
           version = "0.1.0";
           src = ./.;
