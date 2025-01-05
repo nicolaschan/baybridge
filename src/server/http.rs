@@ -28,10 +28,10 @@ use super::templates;
 #[derive(Clone)]
 pub struct AppState {
     controller: SqliteController,
-    peers: Vec<String>,
+    peers: Vec<url::Url>,
 }
 
-pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Result<()> {
+pub async fn start_http_server(config: &Configuration, peers: Vec<url::Url>) -> Result<()> {
     use axum::{routing::get, Router};
     use tokio::net::TcpListener;
 
@@ -40,7 +40,7 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<String>) -> Re
     let controller = SqliteController::new(&database_path)?;
     let peer_connections = peers
         .iter()
-        .map(|peer| Connection::Http(HttpConnection::new(peer)))
+        .map(|peer| Connection::Http(HttpConnection::new(peer.clone())))
         .collect();
 
     let task_controller = TaskController::builder()
@@ -119,7 +119,7 @@ async fn sync_state(State(state): State<AppState>) -> impl IntoResponse {
 
 async fn sync_peers(State(state): State<AppState>) -> impl IntoResponse {
     let peers = Peers {
-        peers: state.peers.clone(),
+        peers: state.peers.iter().map(|peer| peer.to_string()).collect(),
     };
     Json(peers)
 }

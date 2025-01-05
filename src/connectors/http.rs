@@ -32,7 +32,7 @@ impl NamespaceResponse {
 }
 
 pub struct HttpConnection {
-    url: String,
+    url: url::Url,
     client: reqwest::Client,
     circuit_breaker: failsafe::StateMachine<
         failsafe::failure_policy::OrElse<
@@ -44,61 +44,63 @@ pub struct HttpConnection {
 }
 
 impl HttpConnection {
-    pub fn new(url: &str) -> HttpConnection {
+    pub fn new(url: url::Url) -> HttpConnection {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .build()
             .unwrap();
         let circuit_breaker = failsafe::Config::new().build();
         HttpConnection {
-            url: url.to_string(),
+            url,
             client,
             circuit_breaker,
         }
     }
 
-    pub fn url(&self) -> &str {
+    pub fn url(&self) -> &url::Url {
         &self.url
     }
 
     pub async fn set(&self, payload: Signed<Event>) -> Result<()> {
         let verifying_key_string = encode_verifying_key(&payload.verifying_key);
-        let path = format!("{}/keyspace/{}", self.url, verifying_key_string);
-        debug!("Setting {} on {}", payload.inner.name(), path);
-        let request_future = self.client.post(&path).json(&payload).send();
+        let url = self.url.join(&format!("keyspace/{verifying_key_string}"))?;
+        debug!("Setting {} on {}", payload.inner.name(), url.as_str());
+        let request_future = self.client.post(url.as_str()).json(&payload).send();
         self.circuit_breaker.call(request_future).await?;
         Ok(())
     }
 
     pub async fn get(&self, verifying_key: &VerifyingKey, name: &Name) -> Result<RelevantEvents> {
         let verifying_key_string = encode_verifying_key(verifying_key);
-        let path = format!("{}/keyspace/{}/{}", self.url, verifying_key_string, name);
-        debug!("Sending request to {}", path);
-        let request_future = self.client.get(&path).send();
+        let url = self
+            .url
+            .join(&format!("keyspace/{verifying_key_string}/{name}"))?;
+        debug!("Sending request to {}", url.as_str());
+        let request_future = self.client.get(url.as_str()).send();
         let response = self.circuit_breaker.call(request_future).await?;
         response.json::<RelevantEvents>().await.map_err(Into::into)
     }
 
     pub async fn namespace(&self, name: &str) -> Result<NamespaceResponse> {
-        let path = format!("{}/namespace/{}", self.url, name);
-        debug!("Sending request to {}", path);
-        let request_future = self.client.get(&path).send();
+        let url = self.url.join(&format!("namespace/{name}"))?;
+        debug!("Sending request to {}", url.as_str());
+        let request_future = self.client.get(url.as_str()).send();
         let response = self.circuit_breaker.call(request_future).await?;
         response.json().await.map_err(Into::into)
     }
 
     pub async fn state_hash(&self) -> Result<StateHash> {
-        let path = format!("{}/sync/state", self.url);
-        debug!("Sending request to {}", path);
-        let request_future = self.client.get(&path).send();
+        let url = self.url.join("sync/state")?;
+        debug!("Sending request to {}", url.as_str());
+        let request_future = self.client.get(url.as_str()).send();
         let response = self.circuit_breaker.call(request_future).await?;
         response.json().await.map_err(Into::into)
     }
 
     pub async fn sync_events(&self) -> Result<SyncEvents> {
-        let path = format!("{}/sync/events", self.url);
-        debug!("Sending request to {}", path);
-        let request_future = self.client.get(&path).send();
+        let url = self.url.join("sync/events")?;
+        debug!("Sending request to {}", url.as_str());
+        let request_future = self.client.get(url.as_str()).send();
         let response = self.circuit_breaker.call(request_future).await?;
         response.json().await.map_err(Into::into)
     }
