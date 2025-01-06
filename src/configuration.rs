@@ -12,7 +12,9 @@ pub struct Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         let base_dir = dirs::data_dir().unwrap_or("/tmp".into()).join("baybridge");
-        let connection = Connection::Http(HttpConnection::new("http://localhost:3000"));
+        let connection = Connection::Http(HttpConnection::new(
+            url::Url::parse("http://localhost:3000").unwrap(),
+        ));
         Self::new(base_dir, vec![connection])
     }
 }

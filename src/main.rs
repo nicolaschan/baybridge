@@ -68,15 +68,25 @@ async fn main() -> Result<()> {
         cli.server
     };
     let servers = servers
-        .into_iter()
-        .map(|s| Connection::Http(HttpConnection::new(&s)))
+        .iter()
+        .map(|s| {
+            Connection::Http(HttpConnection::new(
+                url::Url::parse(s).expect("Failed to parse server url: {url}"),
+            ))
+        })
         .collect();
 
     let config = Configuration::new(config_dir, servers);
     config.init().await?;
 
     match cli.command {
-        Commands::Serve { peer } => start_http_server(&config, peer).await?,
+        Commands::Serve { peer } => {
+            let peer_http_url = peer
+                .iter()
+                .map(|peer| url::Url::parse(peer).expect("Failed to parse peer url: {url}"))
+                .collect();
+            start_http_server(&config, peer_http_url).await?
+        }
         Commands::Set {
             name,
             value,

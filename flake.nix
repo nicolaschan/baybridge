@@ -3,7 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -50,7 +53,7 @@
           nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
 
           buildInputs = [
-          pkgs.pkg-config
+            pkgs.pkg-config
             pkgs.openssl
           ];
         };
@@ -61,7 +64,7 @@
           copyToRoot = [
             self.packages.${system}.default
           ];
-          config.EntryPoint = [ "/bin/baybridge" ];
+          config.EntryPoint = ["/bin/baybridge"];
         };
       }
     );

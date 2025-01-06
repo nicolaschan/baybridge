@@ -16,7 +16,7 @@ pub enum Connection {
 impl Connection {
     pub fn url(&self) -> &str {
         match self {
-            Connection::Http(http) => http.url(),
+            Connection::Http(http) => http.url().as_str(),
         }
     }
 
