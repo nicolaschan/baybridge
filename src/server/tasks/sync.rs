@@ -1,10 +1,10 @@
 use tracing::debug;
 
 use crate::{
-    api::StateHash, connectors::connection::Connection, server::sqlite_controller::SqliteController,
+    api::StateHash, connectors::connection::Connection, server::data_controller::DataController,
 };
 
-pub async fn run(controller: &SqliteController, connection: &Connection) -> anyhow::Result<()> {
+pub async fn run(controller: &DataController, connection: &Connection) -> anyhow::Result<()> {
     let last_sync_hash = controller.get_peer_last_hash(connection.url()).await;
     let other_state = connection.state_hash().await?;
     if last_sync_hash

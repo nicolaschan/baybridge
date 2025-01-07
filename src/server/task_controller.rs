@@ -2,11 +2,11 @@ use tracing::warn;
 
 use crate::connectors::connection::Connection;
 
-use super::{sqlite_controller::SqliteController, tasks};
+use super::{data_controller::DataController, tasks};
 
 #[derive(bon::Builder)]
 pub struct TaskController {
-    controller: SqliteController,
+    controller: DataController,
     #[builder(default)]
     peer_connections: Vec<Connection>,
 }

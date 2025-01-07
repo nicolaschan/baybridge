@@ -12,11 +12,11 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct SqliteController {
+pub struct SqliteStore {
     connection: Arc<Mutex<rusqlite::Connection>>,
 }
 
-impl SqliteController {
+impl SqliteStore {
     pub fn new(database_path: &PathBuf) -> anyhow::Result<Self> {
         let connection = rusqlite::Connection::open(database_path)?;
         connection.execute(
@@ -142,13 +142,6 @@ impl SqliteController {
                 Ok(0)
             }
         }
-    }
-
-    pub async fn insert_events(&self, events: Vec<Signed<Event>>) -> anyhow::Result<()> {
-        for event in events {
-            self.insert_event(event).await?;
-        }
-        Ok(())
     }
 
     pub async fn set_peer_last_hash(&self, peer_url: &str, hash: StateHash) -> anyhow::Result<()> {

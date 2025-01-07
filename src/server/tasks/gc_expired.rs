@@ -1,8 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::server::sqlite_controller::SqliteController;
+use crate::server::data_controller::DataController;
 
-pub async fn run(controller: &SqliteController) -> anyhow::Result<()> {
+pub async fn run(controller: &DataController) -> anyhow::Result<()> {
     let now = SystemTime::now();
     let since_epoch = now
         .duration_since(UNIX_EPOCH)

@@ -20,14 +20,16 @@ use crate::{
     },
     crypto::{encode::decode_verifying_key, Signed},
     models::Peers,
-    server::{sqlite_controller::SqliteController, task_controller::TaskController},
+    server::{
+        data_controller::DataController, sqlite_store::SqliteStore, task_controller::TaskController,
+    },
 };
 
 use super::templates;
 
 #[derive(Clone)]
 pub struct AppState {
-    controller: SqliteController,
+    controller: DataController,
     peers: Vec<url::Url>,
 }
 
@@ -37,7 +39,8 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<url::Url>) -> 
 
     let database_path = config.server_database_path();
     info!("Using database at {}", database_path.display());
-    let controller = SqliteController::new(&database_path)?;
+    let store = SqliteStore::new(&database_path)?;
+    let controller = DataController::new(store);
     let peer_connections = peers
         .iter()
         .map(|peer| Connection::Http(HttpConnection::new(peer.clone())))
