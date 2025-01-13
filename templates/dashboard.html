@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bay Bridge</title>
     <link href="dist/output.css" rel="stylesheet">
+    <script src="dist/chartjs/chart.umd.js"></script>
     <style>
         body { display: flex; flex-direction: column; min-height: 100vh; }
         main { flex: 1; }
@@ -15,7 +16,7 @@
         <h1 class="text-3xl font-bold">Bay Bridge 🌉</h1>
     </header>
     <main class="p-4">
-        <h2 class="text-2xl font-bold">Statistics</h2>
+        <h2 class="text-2xl font-bold">State</h2>
         <div class="grid grid-cols-1 md:grid-cols-6 gap-4 mt-4">
             <a href="/sync/events">
                 <div class="bg-white p-4 rounded-lg shadow">
@@ -35,6 +36,33 @@
                     <p class="text-gray-600 text-center">peers</p>
                 </div>
             </a>
+        </div>
+        <h2 class="text-2xl font-bold mt-4">Statistics</h2>
+        <div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <canvas id="myChart"></canvas>
+                </div>
+            </div>
+            <script>
+              const ctx = document.getElementById('myChart');
+
+              const data = {
+                labels: [1, 2, 3, 4, 5, 6, 7],
+                datasets: [{
+                  label: 'Event count',
+                  data: [65, 59, 80, 81, 56, 55, 40],
+                  fill: false,
+                  borderColor: 'rgb(75, 192, 192)',
+                  tension: 0.1
+                }]
+              };
+
+              new Chart(ctx, {
+                type: 'line',
+                data: data,
+              });
+            </script>
         </div>
     </main>
     <footer class="text-white p-4">

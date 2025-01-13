@@ -69,6 +69,7 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<url::Url>) -> 
         .route("/sync/state", get(sync_state))
         .route("/sync/events", get(sync_events))
         .nest_service("/dist", ServeDir::new("dist"))
+        .nest_service("/dist/chartjs", ServeDir::new("node_modules/chart.js/dist"))
         .with_state(state);
 
     let bind_address = "0.0.0.0:3000";
