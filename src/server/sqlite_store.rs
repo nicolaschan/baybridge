@@ -116,7 +116,7 @@ impl SqliteStore {
         Ok(events)
     }
 
-    pub async fn insert_event(&self, signed_event: Signed<Event>) -> anyhow::Result<usize> {
+    pub async fn insert_event(&self, signed_event: &Signed<Event>) -> anyhow::Result<usize> {
         let name = signed_event.inner.name();
         let priority = signed_event.inner.priority();
         let verifying_key = signed_event.verifying_key;
@@ -142,6 +142,47 @@ impl SqliteStore {
                 Ok(0)
             }
         }
+    }
+
+    pub async fn delete_stale_events(&self, event: &Signed<Event>) -> anyhow::Result<usize> {
+        let verifying_key = event.verifying_key;
+        let name = event.inner.name();
+        let expires_at = event.inner.expires_at();
+        let priority = event.inner.priority();
+
+        let database_guard = self.connection.lock().await;
+        let num_deleted = database_guard.execute(
+            "DELETE FROM events WHERE verifying_key = ? AND name = ? AND expires_at < ? AND priority < ?",
+            params![
+                encode_verifying_key(&verifying_key).as_bytes(),
+                name.as_str().as_bytes(),
+                expires_at,
+                priority,
+            ],
+        )?;
+        Ok(num_deleted)
+    }
+
+    pub async fn is_stale_event(&self, event: &Signed<Event>) -> anyhow::Result<bool> {
+        let verifying_key = event.verifying_key;
+        let name = event.inner.name();
+        let expires_at = event.inner.expires_at();
+        let priority = event.inner.priority();
+
+        let database_guard = self.connection.lock().await;
+        let mut stmt = database_guard.prepare(
+            "SELECT COUNT(*) FROM events WHERE verifying_key = ? AND name = ? AND expires_at >= ? AND priority >= ?",
+        )?;
+        let count: usize = stmt.query_row(
+            params![
+                encode_verifying_key(&verifying_key).as_bytes(),
+                name.as_str().as_bytes(),
+                expires_at,
+                priority,
+            ],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
     }
 
     pub async fn set_peer_last_hash(&self, peer_url: &str, hash: StateHash) -> anyhow::Result<()> {
