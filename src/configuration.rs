@@ -44,4 +44,8 @@ impl Configuration {
     pub fn server_database_path(&self) -> PathBuf {
         self.base_dir.join("server.sqlite")
     }
+
+    pub fn immutable_store_path(&self) -> PathBuf {
+        self.base_dir.join("immutable_store")
+    }
 }

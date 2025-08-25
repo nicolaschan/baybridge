@@ -49,4 +49,16 @@ impl Connection {
             Connection::Http(http) => http.sync_events().await,
         }
     }
+
+    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<Vec<u8>> {
+        match self {
+            Connection::Http(http) => http.get_immutable(hash).await,
+        }
+    }
+
+    pub async fn set_immutable(&self, data: Vec<u8>) -> Result<blake3::Hash> {
+        match self {
+            Connection::Http(http) => http.set_immutable(data).await,
+        }
+    }
 }

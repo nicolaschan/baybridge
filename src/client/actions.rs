@@ -4,7 +4,7 @@ use crate::{
     configuration::Configuration,
     connectors::http::NamespaceResponse,
     crdt::merge_events,
-    crypto::{encode::decode_verifying_key, CryptoKey, Signed},
+    crypto::{CryptoKey, Signed, encode::decode_verifying_key},
     models::{Name, NamespaceValues, Value},
 };
 use anyhow::Result;
@@ -155,5 +155,30 @@ impl Actions {
     pub async fn whoami(&self) -> VerifyingKey {
         let crypto_key = CryptoKey::from_config(&self.config).await;
         crypto_key.verifying()
+    }
+
+    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<Vec<u8>> {
+        let content_futures = self
+            .config
+            .get_connections()
+            .iter()
+            .map(|conn| conn.get_immutable(hash));
+        join_all(content_futures)
+            .await
+            .into_iter()
+            .filter_map(Result::ok)
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Immutable content not found"))
+    }
+
+    pub async fn set_immutable(&self, data: Vec<u8>) -> Result<blake3::Hash> {
+        let hash = blake3::hash(&data);
+        let set_futures = self
+            .config
+            .get_connections()
+            .iter()
+            .map(|conn| conn.set_immutable(data.clone()));
+        join_all(set_futures).await;
+        Ok(hash)
     }
 }

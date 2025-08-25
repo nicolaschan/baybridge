@@ -1,12 +1,12 @@
 use anyhow::Result;
 use axum::{
+    Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::post,
-    Json,
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use tower_http::services::ServeDir;
 use tracing::info;
 
@@ -18,10 +18,11 @@ use crate::{
         connection::Connection,
         http::{HttpConnection, NamespaceResponse},
     },
-    crypto::{encode::decode_verifying_key, Signed},
+    crypto::{Signed, encode::decode_verifying_key},
     models::Peers,
     server::{
-        data_controller::DataController, sqlite_store::SqliteStore, task_controller::TaskController,
+        data_controller::DataController, immutable_controller::ImmutableController,
+        sqlite_store::SqliteStore, task_controller::TaskController,
     },
 };
 
@@ -29,18 +30,20 @@ use super::templates;
 
 #[derive(Clone)]
 pub struct AppState {
+    immutable_controller: ImmutableController,
     controller: DataController,
     peers: Vec<url::Url>,
 }
 
 pub async fn start_http_server(config: &Configuration, peers: Vec<url::Url>) -> Result<()> {
-    use axum::{routing::get, Router};
+    use axum::{Router, routing::get};
     use tokio::net::TcpListener;
 
     let database_path = config.server_database_path();
     info!("Using database at {}", database_path.display());
     let store = SqliteStore::new(&database_path)?;
     let controller = DataController::new(store);
+    let immutable_controller = ImmutableController::new(config.immutable_store_path()).await;
     let peer_connections = peers
         .iter()
         .map(|peer| Connection::Http(HttpConnection::new(peer.clone())))
@@ -50,7 +53,11 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<url::Url>) -> 
         .controller(controller.clone())
         .peer_connections(peer_connections)
         .build();
-    let state = AppState { controller, peers };
+    let state = AppState {
+        immutable_controller,
+        controller,
+        peers,
+    };
 
     tokio::spawn(async move {
         loop {
@@ -68,6 +75,8 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<url::Url>) -> 
         .route("/sync/peers", get(sync_peers))
         .route("/sync/state", get(sync_state))
         .route("/sync/events", get(sync_events))
+        .route("/immutable/:hash", get(get_immutable))
+        .route("/immutable", post(post_immutable))
         .nest_service("/dist", ServeDir::new("dist"))
         .nest_service("/dist/chartjs", ServeDir::new("node_modules/chart.js/dist"))
         .with_state(state);
@@ -178,4 +187,24 @@ async fn set_event(
     state.controller.insert_event(event).await.unwrap();
 
     (StatusCode::OK, "OK")
+}
+
+async fn get_immutable(
+    Path(hash): Path<String>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let hash = blake3::Hash::from_hex(&hash).unwrap();
+    let data = state.immutable_controller.get(&hash).await;
+    match data {
+        Some(data) => (StatusCode::OK, Json(data)),
+        None => (StatusCode::NOT_FOUND, Json(Vec::new())),
+    }
+}
+
+async fn post_immutable(
+    State(state): State<AppState>,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    let hash = state.immutable_controller.set(&body.to_vec()).await;
+    Json(hash)
 }
