@@ -203,8 +203,8 @@ async fn get_immutable(
 
 async fn post_immutable(
     State(state): State<AppState>,
-    body: axum::body::Bytes,
+    Json(body): Json<Vec<u8>>,
 ) -> impl IntoResponse {
-    let hash = state.immutable_controller.set(&body.to_vec()).await;
+    let hash = state.immutable_controller.set(&body).await;
     Json(hash)
 }
