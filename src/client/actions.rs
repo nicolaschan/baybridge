@@ -8,7 +8,7 @@ use crate::{
         CryptoKey, Signed,
         encode::{decode_verifying_key, encode_verifying_key},
     },
-    models::{Name, NamespaceValues, Value},
+    models::{ContentBlock, Name, NamespaceValues, Value},
 };
 use anyhow::Result;
 use bon::bon;
@@ -169,7 +169,7 @@ impl Actions {
         crypto_key.verifying()
     }
 
-    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<Vec<u8>> {
+    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<ContentBlock> {
         let content_futures = self
             .config
             .get_connections()
@@ -183,8 +183,9 @@ impl Actions {
             .ok_or_else(|| anyhow::anyhow!("Immutable content not found"))
     }
 
-    pub async fn set_immutable(&self, data: Vec<u8>) -> Result<blake3::Hash> {
-        let hash = blake3::hash(&data);
+    pub async fn set_immutable(&self, data: ContentBlock) -> Result<blake3::Hash> {
+        let encoded = bincode::serialize(&data)?;
+        let hash = blake3::hash(&encoded);
         let set_futures = self
             .config
             .get_connections()

@@ -2,7 +2,7 @@ use crate::{
     api::{StateHash, SyncEvents},
     client::{Event, RelevantEvents},
     crypto::{Signed, encode::encode_verifying_key},
-    models::Name,
+    models::{ContentBlock, Name},
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
@@ -105,19 +105,19 @@ impl HttpConnection {
         response.json().await.map_err(Into::into)
     }
 
-    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<Vec<u8>> {
+    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<ContentBlock> {
         let url = self.url.join(&format!("immutable/{hash}"))?;
         debug!("Sending request to {}", url.as_str());
         let request_future = self.client.get(url.as_str()).send();
         let response = self.circuit_breaker.call(request_future).await?;
-        response.json::<Vec<u8>>().await.map_err(Into::into)
+        response.json().await.map_err(Into::into)
     }
 
-    pub async fn set_immutable(&self, data: Vec<u8>) -> Result<blake3::Hash> {
+    pub async fn set_immutable(&self, data: ContentBlock) -> Result<blake3::Hash> {
         let url = self.url.join("immutable")?;
         debug!("Setting immutable data on {}", url.as_str());
         let request_future = self.client.post(url.as_str()).json(&data).send();
         let response = self.circuit_breaker.call(request_future).await?;
-        response.json::<blake3::Hash>().await.map_err(Into::into)
+        response.json().await.map_err(Into::into)
     }
 }

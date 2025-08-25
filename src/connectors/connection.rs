@@ -2,7 +2,7 @@ use crate::{
     api::{StateHash, SyncEvents},
     client::{Event, RelevantEvents},
     crypto::Signed,
-    models::Name,
+    models::{ContentBlock, Name},
 };
 use anyhow::Result;
 use ed25519_dalek::VerifyingKey;
@@ -50,13 +50,13 @@ impl Connection {
         }
     }
 
-    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<Vec<u8>> {
+    pub async fn get_immutable(&self, hash: &blake3::Hash) -> Result<ContentBlock> {
         match self {
             Connection::Http(http) => http.get_immutable(hash).await,
         }
     }
 
-    pub async fn set_immutable(&self, data: Vec<u8>) -> Result<blake3::Hash> {
+    pub async fn set_immutable(&self, data: ContentBlock) -> Result<blake3::Hash> {
         match self {
             Connection::Http(http) => http.set_immutable(data).await,
         }
