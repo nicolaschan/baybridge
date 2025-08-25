@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Result};
-use base64::{engine::general_purpose::URL_SAFE, Engine};
+use anyhow::{Result, anyhow};
+use base64::{Engine, engine::general_purpose::URL_SAFE};
 use ed25519_dalek::VerifyingKey;
 
 pub fn bytes_to_string(bytes: &[u8]) -> String {

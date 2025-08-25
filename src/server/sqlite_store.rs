@@ -8,7 +8,7 @@ use tracing::debug;
 use crate::{
     api::StateHash,
     client::Event,
-    crypto::{encode::encode_verifying_key, Signed},
+    crypto::{Signed, encode::encode_verifying_key},
 };
 
 #[derive(Clone)]
@@ -151,15 +151,26 @@ impl SqliteStore {
         let priority = event.inner.priority();
 
         let database_guard = self.connection.lock().await;
-        let num_deleted = database_guard.execute(
-            "DELETE FROM events WHERE verifying_key = ? AND name = ? AND expires_at < ? AND priority < ?",
-            params![
-                encode_verifying_key(&verifying_key).as_bytes(),
-                name.as_str().as_bytes(),
-                expires_at,
-                priority,
-            ],
-        )?;
+
+        let num_deleted = match expires_at {
+            Some(expires_at) => database_guard.execute(
+                "DELETE FROM events WHERE verifying_key = ? AND name = ? AND expires_at < ? AND priority < ?",
+                params![
+                    encode_verifying_key(&verifying_key).as_bytes(),
+                    name.as_str().as_bytes(),
+                    expires_at,
+                    priority,
+                ],
+            )?,
+            None => database_guard.execute(
+                "DELETE FROM events WHERE verifying_key = ? AND name = ? AND priority < ?",
+                params![
+                    encode_verifying_key(&verifying_key).as_bytes(),
+                    name.as_str().as_bytes(),
+                    priority,
+                ],
+            )?,
+        };
         Ok(num_deleted)
     }
 

@@ -1,15 +1,15 @@
 use crate::configuration::Configuration;
-use anyhow::{anyhow, Context, Result};
-use ed25519_dalek::{ed25519::signature::SignerMut, SigningKey, VerifyingKey};
+use anyhow::{Context, Result, anyhow};
+use ed25519_dalek::{SigningKey, VerifyingKey, ed25519::signature::SignerMut};
 use rand::rngs::OsRng;
 
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 
 use super::{
+    Signed,
     encode::{bytes_to_string, string_to_bytes},
     signed::Signable,
-    Signed,
 };
 
 fn generate_signing_key() -> SigningKey {
