@@ -4,7 +4,10 @@ use crate::{
     configuration::Configuration,
     connectors::http::NamespaceResponse,
     crdt::merge_events,
-    crypto::{CryptoKey, Signed, encode::decode_verifying_key},
+    crypto::{
+        CryptoKey, Signed,
+        encode::{decode_verifying_key, encode_verifying_key},
+    },
     models::{Name, NamespaceValues, Value},
 };
 use anyhow::Result;
@@ -113,6 +116,15 @@ impl Actions {
             Some(value) => Ok(value),
             None => Err(anyhow::anyhow!("Value not found")),
         }
+    }
+
+    pub async fn get_by_key(&self, verifying_key: &VerifyingKey, name: &Name) -> Result<Value> {
+        self.get(&encode_verifying_key(verifying_key), name).await
+    }
+
+    pub async fn get_mine(&self, name: &Name) -> Result<Value> {
+        let verifying_key = self.whoami().await;
+        self.get_by_key(&verifying_key, name).await
     }
 
     pub async fn namespace(&self, name: &str) -> Result<NamespaceValues> {
