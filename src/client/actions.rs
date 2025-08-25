@@ -184,14 +184,16 @@ impl Actions {
     }
 
     pub async fn set_immutable(&self, data: ContentBlock) -> Result<blake3::Hash> {
-        let encoded = bincode::serialize(&data)?;
-        let hash = blake3::hash(&encoded);
         let set_futures = self
             .config
             .get_connections()
             .iter()
             .map(|conn| conn.set_immutable(data.clone()));
-        join_all(set_futures).await;
-        Ok(hash)
+        join_all(set_futures)
+            .await
+            .into_iter()
+            .filter_map(Result::ok)
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Failed to set immutable content"))
     }
 }
