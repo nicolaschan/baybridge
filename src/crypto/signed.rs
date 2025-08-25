@@ -1,58 +1,38 @@
-use ed25519_dalek::{Signature, VerifyingKey};
+use bincode::config::standard;
+use bincode::{Decode, Encode};
+use ed25519_dalek::{PUBLIC_KEY_LENGTH, Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
-use serde_with::base64::Base64;
-use serde_with::serde_as;
 
-pub trait Signable: Clone + Serialize {}
+pub trait Signable: Clone + Encode + Serialize {}
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(from = "SerializableSigned<T>", into = "SerializableSigned<T>")]
+#[derive(Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Signed<T: Signable> {
     pub inner: T,
-    pub verifying_key: VerifyingKey,
-    pub signature: Signature,
-}
-
-#[serde_as]
-#[derive(Serialize, Deserialize)]
-pub struct SerializableSigned<T> {
-    pub inner: T,
-    #[serde_as(as = "Base64<serde_with::base64::UrlSafe>")]
-    pub verifying_key: Vec<u8>,
-    #[serde_as(as = "Base64")]
-    pub signature: Vec<u8>,
+    verifying_key: [u8; PUBLIC_KEY_LENGTH],
+    signature: Vec<u8>,
 }
 
 impl<T: Signable> Signed<T> {
+    pub fn new(inner: T, verifying_key: VerifyingKey, signature: Signature) -> Self {
+        Signed {
+            inner,
+            verifying_key: verifying_key.to_bytes(),
+            signature: signature.to_bytes().to_vec(),
+        }
+    }
+
     pub fn verify(&self, verifying_key: &VerifyingKey) -> bool {
-        let serialized = bincode::serialize(&self.inner).unwrap();
+        let serialized = bincode::encode_to_vec(&self.inner, standard()).unwrap();
         verifying_key
-            .verify_strict(&serialized, &self.signature)
+            .verify_strict(&serialized, &self.signature())
             .is_ok()
     }
-}
 
-impl<T: Signable> From<Signed<T>> for SerializableSigned<T> {
-    fn from(value: Signed<T>) -> Self {
-        let verifying_key = value.verifying_key.to_bytes().to_vec();
-        let signature = value.signature.to_bytes().to_vec();
-        SerializableSigned {
-            inner: value.inner,
-            verifying_key,
-            signature,
-        }
+    pub fn verifying_key(&self) -> VerifyingKey {
+        VerifyingKey::from_bytes(&self.verifying_key).unwrap()
     }
-}
 
-impl<T: Signable> From<SerializableSigned<T>> for Signed<T> {
-    fn from(value: SerializableSigned<T>) -> Self {
-        let verifying_key =
-            VerifyingKey::from_bytes(&value.verifying_key.try_into().unwrap()).unwrap();
-        let signature = Signature::from_bytes(&value.signature.try_into().unwrap());
-        Signed {
-            inner: value.inner,
-            verifying_key,
-            signature,
-        }
+    pub fn signature(&self) -> Signature {
+        Signature::from_bytes(&self.signature.as_slice().try_into().unwrap())
     }
 }

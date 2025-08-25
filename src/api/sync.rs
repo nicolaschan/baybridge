@@ -1,8 +1,9 @@
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{client::Event, crypto::Signed};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode, Serialize, Deserialize)]
 pub struct SyncEvents {
     pub events: Vec<Signed<Event>>,
 }

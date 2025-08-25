@@ -1,5 +1,6 @@
 use crate::configuration::Configuration;
 use anyhow::{Context, Result, anyhow};
+use bincode::config::standard;
 use ed25519_dalek::{SigningKey, VerifyingKey, ed25519::signature::SignerMut};
 use rand::rngs::OsRng;
 
@@ -39,13 +40,9 @@ impl CryptoKey {
     }
 
     pub fn sign<T: Signable>(&mut self, payload: T) -> Signed<T> {
-        let serialized = bincode::serialize(&payload).unwrap();
+        let serialized = bincode::encode_to_vec(&payload, standard()).unwrap();
         let signature = self.signing_key.sign(&serialized);
-        Signed {
-            inner: payload,
-            verifying_key: self.verifying(),
-            signature,
-        }
+        Signed::new(payload, self.verifying(), signature)
     }
 
     async fn generate_new(config: &Configuration) -> Self {

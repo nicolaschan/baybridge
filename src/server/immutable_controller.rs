@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use bincode::config::standard;
 use tokio::sync::RwLock;
 
 use crate::models::ContentBlock;
@@ -23,12 +24,14 @@ impl ImmutableController {
         let _guard = self.filesystem_lock.read().await;
         let path = self.basedir.join(hash.to_string());
         let encoded = tokio::fs::read(&path).await.ok()?;
-        bincode::deserialize(&encoded).ok()
+        bincode::decode_from_slice(&encoded, standard())
+            .ok()
+            .map(|v| v.0)
     }
 
     pub async fn set(&self, content: &ContentBlock) -> blake3::Hash {
         let _guard = self.filesystem_lock.write().await;
-        let encoded = bincode::serialize(content).unwrap();
+        let encoded = bincode::encode_to_vec(content, standard()).unwrap();
         let hash = blake3::hash(&encoded);
         let path = self.basedir.join(hash.to_string());
         if !path.exists() {

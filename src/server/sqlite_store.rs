@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use bincode::config::standard;
 use itertools::Itertools;
 use rusqlite::params;
 use tokio::sync::Mutex;
@@ -66,7 +67,9 @@ impl SqliteStore {
             .query_map([], |row| {
                 let signed_event_serialized: Vec<u8> = row.get(0)?;
                 let signed_event: Signed<Event> =
-                    bincode::deserialize(&signed_event_serialized).unwrap();
+                    bincode::decode_from_slice(&signed_event_serialized, standard())
+                        .unwrap()
+                        .0;
                 Ok(signed_event)
             })?
             .filter_map(Result::ok)
@@ -76,7 +79,7 @@ impl SqliteStore {
 
     pub async fn current_state_hash(&self) -> anyhow::Result<StateHash> {
         let all_signed_events = self.signed_events().await?;
-        let serialized_events = bincode::serialize(&all_signed_events)?;
+        let serialized_events = bincode::encode_to_vec(&all_signed_events, standard())?;
         let hash = blake3::hash(&serialized_events);
         Ok(StateHash { hash })
     }
@@ -93,7 +96,9 @@ impl SqliteStore {
             .query_map([verifying_key.as_bytes(), name.as_bytes()], |row| {
                 let signed_event_serialized: Vec<u8> = row.get(0)?;
                 let signed_event: Signed<Event> =
-                    bincode::deserialize(&signed_event_serialized).unwrap();
+                    bincode::decode_from_slice(&signed_event_serialized, standard())
+                        .unwrap()
+                        .0;
                 Ok(signed_event)
             })?
             .filter_map(Result::ok)
@@ -108,7 +113,9 @@ impl SqliteStore {
             .query_map([name.as_bytes()], |row| {
                 let signed_event_serialized: Vec<u8> = row.get(0)?;
                 let signed_event: Signed<Event> =
-                    bincode::deserialize(&signed_event_serialized).unwrap();
+                    bincode::decode_from_slice(&signed_event_serialized, standard())
+                        .unwrap()
+                        .0;
                 Ok(signed_event)
             })?
             .filter_map(Result::ok)
@@ -119,11 +126,11 @@ impl SqliteStore {
     pub async fn insert_event(&self, signed_event: &Signed<Event>) -> anyhow::Result<usize> {
         let name = signed_event.inner.name();
         let priority = signed_event.inner.priority();
-        let verifying_key = signed_event.verifying_key;
+        let verifying_key = signed_event.verifying_key();
         let expires_at = signed_event.inner.expires_at();
 
         let normalized_verifying_key = encode_verifying_key(&verifying_key);
-        let signed_event_serialized = bincode::serialize(&signed_event)?;
+        let signed_event_serialized = bincode::encode_to_vec(&signed_event, standard())?;
         let database_guard = self.connection.lock().await;
         let insert_result = database_guard.execute(
             "INSERT INTO events (verifying_key, name, signed_event, priority, expires_at) VALUES (?, ?, ?, ?, ?)",
@@ -145,7 +152,7 @@ impl SqliteStore {
     }
 
     pub async fn delete_stale_events(&self, event: &Signed<Event>) -> anyhow::Result<usize> {
-        let verifying_key = event.verifying_key;
+        let verifying_key = event.verifying_key();
         let name = event.inner.name();
         let expires_at = event.inner.expires_at();
         let priority = event.inner.priority();
@@ -175,7 +182,7 @@ impl SqliteStore {
     }
 
     pub async fn is_stale_event(&self, event: &Signed<Event>) -> anyhow::Result<bool> {
-        let verifying_key = event.verifying_key;
+        let verifying_key = event.verifying_key();
         let name = event.inner.name();
         let expires_at = event.inner.expires_at();
         let priority = event.inner.priority();

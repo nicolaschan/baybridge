@@ -1,8 +1,9 @@
 use std::fmt::Display;
 
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Encode, Decode, Deserialize, Serialize)]
 pub struct Name(String);
 
 impl Display for Name {

@@ -62,7 +62,7 @@ impl HttpConnection {
     }
 
     pub async fn set(&self, payload: Signed<Event>) -> Result<()> {
-        let verifying_key_string = encode_verifying_key(&payload.verifying_key);
+        let verifying_key_string = encode_verifying_key(&payload.verifying_key());
         let url = self.url.join(&format!("keyspace/{verifying_key_string}"))?;
         debug!("Setting {} on {}", payload.inner.name(), url.as_str());
         let request_future = self.client.post(url.as_str()).json(&payload).send();

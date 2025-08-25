@@ -1,3 +1,4 @@
+use bincode::config::standard;
 use tracing::debug;
 
 use crate::{
@@ -22,7 +23,7 @@ pub async fn run(controller: &DataController, connection: &Connection) -> anyhow
         connection.url()
     );
 
-    let serialized_events = bincode::serialize(&other_events.events)?;
+    let serialized_events = bincode::encode_to_vec(&other_events.events, standard())?;
     let events_hash = StateHash {
         hash: blake3::hash(&serialized_events),
     };

@@ -1,3 +1,4 @@
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -5,7 +6,7 @@ use crate::{
     models::{Name, Value},
 };
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Encode, Decode, Deserialize, Serialize)]
 pub struct SetEvent {
     pub name: Name,
     pub value: Value,
@@ -15,7 +16,7 @@ pub struct SetEvent {
 
 impl Signable for SetEvent {}
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Encode, Decode, Deserialize, Serialize)]
 pub struct DeletionEvent {
     pub name: Name,
     pub priority: u64,
@@ -23,7 +24,7 @@ pub struct DeletionEvent {
 
 impl Signable for DeletionEvent {}
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Encode, Decode, Deserialize, Serialize)]
 pub enum Event {
     Set(SetEvent),
     Delete(DeletionEvent),

@@ -145,7 +145,7 @@ impl Actions {
         let event_mapping: HashMap<VerifyingKey, Vec<Signed<Event>>> = merged_namespace
             .events
             .into_iter()
-            .map(|event| (event.verifying_key, event))
+            .map(|event| (event.verifying_key(), event))
             .into_group_map();
         let value_mapping = event_mapping
             .iter()
