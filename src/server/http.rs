@@ -19,7 +19,7 @@ use crate::{
         http::{HttpConnection, NamespaceResponse},
     },
     crypto::{Signed, encode::decode_verifying_key},
-    models::Peers,
+    models::{ContentBlock, Peers},
     server::{
         data_controller::DataController, immutable_controller::ImmutableController,
         sqlite_store::SqliteStore, task_controller::TaskController,
@@ -196,14 +196,14 @@ async fn get_immutable(
     let hash = blake3::Hash::from_hex(&hash).unwrap();
     let data = state.immutable_controller.get(&hash).await;
     match data {
-        Some(data) => (StatusCode::OK, Json(data)),
-        None => (StatusCode::NOT_FOUND, Json(Vec::new())),
+        Some(data) => (StatusCode::OK, Json(data)).into_response(),
+        None => (StatusCode::NOT_FOUND, "404 not found").into_response(),
     }
 }
 
 async fn post_immutable(
     State(state): State<AppState>,
-    Json(body): Json<Vec<u8>>,
+    Json(body): Json<ContentBlock>,
 ) -> impl IntoResponse {
     let hash = state.immutable_controller.set(&body).await;
     Json(hash)
