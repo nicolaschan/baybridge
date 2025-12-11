@@ -9,7 +9,7 @@ use baybridge::{
     models::{Name, Value},
     server::http::start_http_server,
 };
-use clap::{Parser, Subcommand, command};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
