@@ -49,7 +49,6 @@
             pkgs.nodejs
             pkgs.rust-analyzer
             pkgs.pkg-config
-            pkgs.openssl
           ];
         };
 
@@ -71,7 +70,6 @@
 
           buildInputs = [
             pkgs.pkg-config
-            pkgs.openssl
             nodeDependencies
           ];
         };
