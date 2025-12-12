@@ -66,14 +66,18 @@ jobs:
           for arch in "${ARCHS[@]}"; do
             CONTAINER_WITH_TAG=$(docker load < docker-image-$arch/result | rev | cut -d' ' -f1 | rev)
             CONTAINER=$(echo "$CONTAINER_WITH_TAG" | cut -d: -f1)
+            echo "CONTAINER_WITH_TAG: $CONTAINER_WITH_TAG"
+            echo "CONTAINER: $CONTAINER"
 
             IMAGE="localhost:5000/$CONTAINER:${TAG_PREFIX}-$arch"
+            echo "IMAGE: $IMAGE"
             docker tag "$CONTAINER_WITH_TAG" "$IMAGE"
             docker push "$IMAGE"
 
             IMAGES+=("$IMAGE")
           done
 
+          echo "${IMAGES[@]}"
           docker buildx imagetools create \
             -t ghcr.io/nicolaschan/$CONTAINER:latest \
             -t ghcr.io/nicolaschan/$CONTAINER:${TAG_PREFIX} \
