@@ -59,15 +59,16 @@ jobs:
                   password: ${{ secrets.GITHUB_TOKEN }}
             - name: Tag & push docker image
               run: |
-                  ls -R
                   docker load < docker-image-amd64/result
-                  docker tag $CONTAINER:latest $CONTAINER:latest-amd64
+                  docker tag $CONTAINER:latest ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64
+                  docker push ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64
+
                   docker load < docker-image-arm64/result
-                  docker tag $CONTAINER:latest $CONTAINER:latest-arm64
+                  docker tag $CONTAINER:latest ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
+                  docker push ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
 
-                  docker buildx imagetools create -t $CONTAINER:latest $CONTAINER:latest-amd64 $CONTAINER:latest-arm64
+                  docker buildx imagetools create -t ghcr.io/nicolaschan/$CONTAINER:latest \
+                    ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64 \
+                    ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
 
-                  docker tag $CONTAINER:latest ghcr.io/nicolaschan/$CONTAINER:latest
                   docker push ghcr.io/nicolaschan/$CONTAINER:latest
-                  docker tag $CONTAINER:latest ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}
-                  docker push ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}
