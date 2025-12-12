@@ -77,10 +77,10 @@ pub async fn start_http_server(config: &Configuration, peers: Vec<url::Url>) -> 
         .route("/sync/events", get(sync_events))
         .route("/immutable/:hash", get(get_immutable))
         .route("/immutable", post(post_immutable))
-        .nest_service("/dist", ServeDir::new(env!("BAYBRIDGE_DIST_PATH")))
+        .nest_service("/dist", ServeDir::new(option_env!("BAYBRIDGE_DIST_PATH").unwrap_or("dist")))
         .nest_service(
             "/dist/chartjs",
-            ServeDir::new(env!("BAYBRIDGE_CHARTJS_DIST_PATH")),
+            ServeDir::new(option_env!("BAYBRIDGE_CHARTJS_DIST_PATH").unwrap_or("node_modules/chart.js/dist")),
         )
         .with_state(state);
 
