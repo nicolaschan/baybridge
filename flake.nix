@@ -26,7 +26,7 @@
         rustVersion = pkgs.rust-bin.stable.latest.default;
         packageMetadata = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package;
         pname = packageMetadata.name;
-        version = packageMetadata.version;
+        inherit (packageMetadata) version;
         nodeDependencies = pkgs.buildNpmPackage {
           inherit version;
           pname = "${pname}-node-deps";
@@ -52,34 +52,36 @@
           ];
         };
 
-        packages.nodeDependencies = nodeDependencies;
+        packages = {
+          inherit nodeDependencies;
 
-        packages.default = pkgs.rustPlatform.buildRustPackage {
-          inherit pname version;
-          src = ./.;
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-            allowBuiltinFetchGit = true;
+          default = pkgs.rustPlatform.buildRustPackage {
+            inherit pname version;
+            src = ./.;
+            cargoLock = {
+              lockFile = ./Cargo.lock;
+              allowBuiltinFetchGit = true;
+            };
+
+            BAYBRIDGE_DIST_PATH = "${nodeDependencies}/dist";
+            BAYBRIDGE_CHARTJS_DIST_PATH = "${nodeDependencies}/node_modules/chart.js/dist";
+
+            # nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
+
+            buildInputs = [
+              # pkgs.pkg-config
+              nodeDependencies
+            ];
           };
 
-          BAYBRIDGE_DIST_PATH = "${nodeDependencies}/dist";
-          BAYBRIDGE_CHARTJS_DIST_PATH = "${nodeDependencies}/node_modules/chart.js/dist";
-
-          # nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
-
-          buildInputs = [
-            # pkgs.pkg-config
-            nodeDependencies
-          ];
-        };
-
-        packages.docker = pkgs.dockerTools.buildLayeredImage {
-          name = pname;
-          tag = version;
-          config = {
-            Entrypoint = ["${self.packages.${system}.default}/bin/${pname}"];
-            Cmd = ["serve"];
-            User = "100";
+          docker = pkgs.dockerTools.buildLayeredImage {
+            name = pname;
+            tag = version;
+            config = {
+              Entrypoint = ["${self.packages.${system}.default}/bin/${pname}"];
+              Cmd = ["serve"];
+              User = "100";
+            };
           };
         };
       }
