@@ -64,7 +64,7 @@ jobs:
           IMAGES=()
 
           for arch in "${ARCHS[@]}"; do
-            CONTAINER_WITH_TAG=$(docker load < docker-image-$arch/result | rev | cut -d' ' -f1 | rev)
+            CONTAINER_WITH_TAG=$(docker load < docker-image-$arch/result | tail -n1 | rev | cut -d' ' -f1 | rev)
             CONTAINER=$(echo "$CONTAINER_WITH_TAG" | cut -d: -f1)
             echo "CONTAINER_WITH_TAG: $CONTAINER_WITH_TAG"
             echo "CONTAINER: $CONTAINER"
