@@ -46,6 +46,11 @@ jobs:
     docker-push:
         needs: [docker-amd64, docker-arm64]
         runs-on: ubuntu-latest
+        services:
+            registry:
+                image: registry:2
+                ports:
+                    - 5000:5000
         permissions:
             contents: read
             packages: write
@@ -60,15 +65,15 @@ jobs:
             - name: Tag & push docker image
               run: |
                   docker load < docker-image-amd64/result
-                  docker tag $CONTAINER:latest ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64
-                  docker push ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64
+                  docker tag $CONTAINER:latest localhost:5000/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64
+                  docker push localhost:5000/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64
 
                   docker load < docker-image-arm64/result
-                  docker tag $CONTAINER:latest ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
-                  docker push ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
+                  docker tag $CONTAINER:latest localhost:5000/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
+                  docker push localhost:5000/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
 
-                  docker buildx imagetools create -t ghcr.io/nicolaschan/$CONTAINER:latest \
-                    ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64 \
-                    ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
-
-                  docker push ghcr.io/nicolaschan/$CONTAINER:latest
+                  docker buildx imagetools create \
+                    -t ghcr.io/nicolaschan/$CONTAINER:latest \
+                    -t ghcr.io/nicolaschan/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }} \
+                    localhost:5000/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-amd64 \
+                    localhost:5000/$CONTAINER:${GITHUB_REF#refs/*/}-${{ github.run_id }}-arm64
