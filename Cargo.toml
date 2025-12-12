@@ -15,7 +15,7 @@ path = "src/main.rs"
 anyhow = "1.0.86"
 askama = { version = "0.12.1", features = ["serde", "serde-json", "with-axum"] }
 askama_axum = { version = "0.4.0", features = ["serde-json"] }
-axum = { version = "0.7.5", features = ["macros"] }
+axum = { version = "0.7.5", features = ["macros", "http2"] }
 base64 = "0.22.1"
 bincode = { version = "2.0.1", features = ["serde"] }
 blake3 = { version = "1.5.4", features = ["rayon", "serde"] }
