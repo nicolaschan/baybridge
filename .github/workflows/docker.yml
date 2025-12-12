@@ -39,7 +39,7 @@ jobs:
           name: docker-image-arm64
           path: result
   push:
-    needs: [docker-amd64, docker-arm64]
+    needs: [amd64, arm64]
     runs-on: ubuntu-latest
     services:
       registry:
