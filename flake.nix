@@ -17,7 +17,10 @@
     flake-utils,
     ...
   }:
-    flake-utils.lib.eachDefaultSystem (
+    let
+      systems = flake-utils.lib.defaultSystems ++ ["riscv64-linux"];
+    in
+    flake-utils.lib.eachSystem systems (
       system: let
         overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {
@@ -66,10 +69,7 @@
             BAYBRIDGE_DIST_PATH = "${nodeDependencies}/dist";
             BAYBRIDGE_CHARTJS_DIST_PATH = "${nodeDependencies}/node_modules/chart.js/dist";
 
-            # nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
-
             buildInputs = [
-              # pkgs.pkg-config
               nodeDependencies
             ];
           };
@@ -77,6 +77,9 @@
           docker = pkgs.dockerTools.buildLayeredImage {
             name = pname;
             tag = version;
+            extraCommands = ''
+              mkdir -p -m 1777 .local
+            '';
             config = {
               Entrypoint = ["${self.packages.${system}.default}/bin/${pname}"];
               Cmd = ["serve"];
