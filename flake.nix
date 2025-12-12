@@ -25,11 +25,11 @@
         };
         rustVersion = pkgs.rust-bin.stable.latest.default;
         packageMetadata = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package;
-        packageName = packageMetadata.name;
-        packageVersion = packageMetadata.version;
+        pname = packageMetadata.name;
+        version = packageMetadata.version;
         nodeDependencies = pkgs.buildNpmPackage {
-          pname = "${packageName}-node-deps";
-          version = packageVersion;
+          inherit version;
+          pname = "${pname}-node-deps";
           src = ./.;
           npmDepsHash = "sha256-78WzgrRJ7lSQSFb1NDTpNsz7sPsjh+M8qxxwoSz9fXc=";
           installPhase = ''
@@ -55,8 +55,7 @@
         packages.nodeDependencies = nodeDependencies;
 
         packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = packageName;
-          version = packageVersion;
+          inherit pname version;
           src = ./.;
           cargoLock = {
             lockFile = ./Cargo.lock;
@@ -66,19 +65,22 @@
           BAYBRIDGE_DIST_PATH = "${nodeDependencies}/dist";
           BAYBRIDGE_CHARTJS_DIST_PATH = "${nodeDependencies}/node_modules/chart.js/dist";
 
-          nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
+          # nativeBuildInputs = [pkgs.pkg-config pkgs.perl pkgs.cmake];
 
           buildInputs = [
-            pkgs.pkg-config
+            # pkgs.pkg-config
             nodeDependencies
           ];
         };
 
         packages.docker = pkgs.dockerTools.buildLayeredImage {
-          name = packageName;
-          tag = "latest";
-          config.Entrypoint = ["${self.packages.${system}.default}/bin/${packageName}"];
-          config.Cmd = ["serve"];
+          name = pname;
+          tag = version;
+          config = {
+            Entrypoint = ["${self.packages.${system}.default}/bin/${pname}"];
+            Cmd = ["serve"];
+            User = "100";
+          };
         };
       }
     );
