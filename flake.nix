@@ -16,10 +16,9 @@
     rust-overlay,
     flake-utils,
     ...
-  }:
-    let
-      systems = flake-utils.lib.defaultSystems ++ ["riscv64-linux"];
-    in
+  }: let
+    systems = flake-utils.lib.defaultSystems ++ ["riscv64-linux"];
+  in
     flake-utils.lib.eachSystem systems (
       system: let
         overlays = [(import rust-overlay)];
@@ -43,6 +42,21 @@
             runHook postInstall
           '';
         };
+        rustPackageOptions = {
+          inherit pname version;
+          src = ./.;
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            allowBuiltinFetchGit = true;
+          };
+
+          BAYBRIDGE_DIST_PATH = "${nodeDependencies}/dist";
+          BAYBRIDGE_CHARTJS_DIST_PATH = "${nodeDependencies}/node_modules/chart.js/dist";
+
+          buildInputs = [
+            nodeDependencies
+          ];
+        };
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
@@ -58,21 +72,8 @@
         packages = {
           inherit nodeDependencies;
 
-          default = pkgs.rustPlatform.buildRustPackage {
-            inherit pname version;
-            src = ./.;
-            cargoLock = {
-              lockFile = ./Cargo.lock;
-              allowBuiltinFetchGit = true;
-            };
-
-            BAYBRIDGE_DIST_PATH = "${nodeDependencies}/dist";
-            BAYBRIDGE_CHARTJS_DIST_PATH = "${nodeDependencies}/node_modules/chart.js/dist";
-
-            buildInputs = [
-              nodeDependencies
-            ];
-          };
+          default = pkgs.rustPlatform.buildRustPackage rustPackageOptions;
+          static = pkgs.pkgsStatic.rustPlatform.buildRustPackage rustPackageOptions;
 
           docker = pkgs.dockerTools.buildLayeredImage {
             name = pname;
